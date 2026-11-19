@@ -159,3 +159,38 @@
 .governance-report-caveat,.governance-no-data{font-size:9px;color:#8292a9;line-height:1.6}.governance-report-caveat{margin:12px 0 0}.governance-report-error{font-size:10px;color:#ffb1ad}
 @media(max-width:850px){.governance-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:600px){.governance-report-panel{padding:14px}.governance-report-heading{align-items:flex-start;flex-direction:column}.governance-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.governance-report-grid{grid-template-columns:1fr}.governance-report-filters{align-items:stretch}.governance-report-filters label{flex:1;min-width:120px}.governance-report-filters>span{width:100%;margin-left:0}.governance-recent-activity>div:first-child{align-items:flex-start;flex-direction:column}}
+
+
+/* Framework crosswalk and print-ready evidence index */
+.compliance-mapping-panel{margin-top:18px;padding:20px;background:#0e1624;border:1px solid #26364b;border-radius:10px}
+.compliance-mapping-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:14px}
+.compliance-mapping-heading h2{font-size:15px;margin:7px 0 5px}.compliance-mapping-heading p{font-size:10px;color:#8796aa;margin:0;line-height:1.6}
+.compliance-mapping-note{padding:12px 14px;border:1px solid #65532f;background:#241e13;color:#d8c9a6;border-radius:7px;font-size:10px;line-height:1.65}
+.compliance-mapping-note strong{color:#f3dfad}
+.compliance-framework-legend{display:flex;gap:16px;flex-wrap:wrap;margin:13px 0;color:#9aabc2;font-size:9px}
+.compliance-framework-legend b{color:#dce7f7}
+.compliance-table-wrap{overflow-x:auto;border:1px solid #26364b;border-radius:7px}
+.compliance-mapping-table{width:100%;border-collapse:collapse;min-width:900px;background:#101c2c}
+.compliance-mapping-table th{padding:11px 10px;background:#17263a;color:#9fb2cb;text-align:left;font-size:9px;letter-spacing:.05em;text-transform:uppercase}
+.compliance-mapping-table td{padding:11px 10px;border-top:1px solid #26364b;vertical-align:top;color:#c5d2e3;font-size:9px;line-height:1.6}
+.compliance-mapping-table td:first-child{white-space:nowrap}.compliance-mapping-table td:first-child strong{color:#8fc4ff}
+.compliance-mapping-table td:nth-child(2) span{display:block;white-space:nowrap;color:#b9c9dc}
+.compliance-mapping-table td p{margin:0 0 5px}.compliance-mapping-table td small{display:block;color:#8292a9;overflow-wrap:anywhere}
+.compliance-mapping-footnote{font-size:9px;color:#8292a9;line-height:1.6;margin:12px 0 0}
+@media(max-width:650px){.compliance-mapping-panel{padding:14px}.compliance-mapping-heading{align-items:flex-start;flex-direction:column}}
+@media print{
+  @page{size:A4 landscape;margin:12mm}
+  body *{visibility:hidden!important}
+  #sentinelai-compliance-mapping,#sentinelai-compliance-mapping *{visibility:visible!important}
+  #sentinelai-compliance-mapping{position:absolute!important;inset:0!important;width:100%!important;margin:0!important;padding:0!important;background:#fff!important;border:0!important;color:#111!important}
+  #sentinelai-compliance-mapping h2,#sentinelai-compliance-mapping p,#sentinelai-compliance-mapping td,#sentinelai-compliance-mapping th,#sentinelai-compliance-mapping span,#sentinelai-compliance-mapping strong,#sentinelai-compliance-mapping small{color:#111!important}
+  #sentinelai-compliance-mapping .compliance-print-button{display:none!important}
+  #sentinelai-compliance-mapping .compliance-mapping-note{background:#fff!important;border:1px solid #999!important;color:#222!important}
+  #sentinelai-compliance-mapping .compliance-mapping-note strong{color:#111!important}
+  #sentinelai-compliance-mapping .compliance-table-wrap{overflow:visible!important;border-color:#999!important}
+  #sentinelai-compliance-mapping .compliance-mapping-table{min-width:0!important;background:#fff!important;font-size:8pt!important}
+  #sentinelai-compliance-mapping .compliance-mapping-table th{background:#eee!important;color:#111!important}
+  #sentinelai-compliance-mapping .compliance-mapping-table td,#sentinelai-compliance-mapping .compliance-mapping-table th{border:1px solid #bbb!important;padding:6px!important}
+  #sentinelai-compliance-mapping .compliance-mapping-table td small{color:#333!important}
+  #sentinelai-compliance-mapping .compliance-mapping-footnote{color:#333!important}
+}
