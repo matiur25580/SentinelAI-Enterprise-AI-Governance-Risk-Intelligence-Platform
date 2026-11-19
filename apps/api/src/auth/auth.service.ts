@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -31,6 +32,7 @@ export class AuthService {
   private readonly refreshSecret: string;
   private readonly refreshLifetimeMs = 30 * 24 * 60 * 60 * 1000;
   private readonly requireEmailVerification: boolean;
+  private readonly allowSelfServiceRegistration: boolean;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -39,6 +41,7 @@ export class AuthService {
     private readonly accountLifecycle: AccountLifecycleService,
   ) {
     this.requireEmailVerification = config.get<boolean>("AUTH_REQUIRE_VERIFIED_EMAIL") ?? (config.get<string>("NODE_ENV") === "production");
+    this.allowSelfServiceRegistration = config.get<boolean>("ALLOW_SELF_SERVICE_REGISTRATION") ?? (config.get<string>("NODE_ENV") !== "production");
     this.accessSecret = config.getOrThrow<string>("JWT_ACCESS_SECRET");
     this.refreshSecret = config.getOrThrow<string>("JWT_REFRESH_SECRET");
 
@@ -51,6 +54,9 @@ export class AuthService {
   }
 
   async register(dto: RegisterDto) {
+    if (!this.allowSelfServiceRegistration) {
+      throw new ForbiddenException("Self-service registration is disabled. Use the approved workspace onboarding process.");
+    }
     const email = dto.email.trim().toLowerCase();
     const existing = await this.prisma.user.findUnique({ where: { email } });
     if (existing) {
