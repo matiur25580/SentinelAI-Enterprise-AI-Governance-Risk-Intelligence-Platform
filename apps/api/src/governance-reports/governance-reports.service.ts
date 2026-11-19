@@ -13,7 +13,7 @@ const MAX_AUDIT_EVENTS = 5_000;
 function csvCell(value: unknown): string {
   let text = value == null ? "" : value instanceof Date ? value.toISOString()
     : typeof value === "object" ? (JSON.stringify(value) ?? "") : String(value);
-  if (/^[\\s]*[=+\\-@]/.test(text)) text = "'" + text;
+  if (/^\s*[=+\-@]/.test(text)) text = "'" + text;
   return `"${text.replace(/"/g, '""')}"`;
 }
 
