@@ -10,7 +10,7 @@ export default function VerifyEmailPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    const value = new URLSearchParams(window.location.search).get("token") || "";
+    const value = new URLSearchParams(window.location.hash.slice(1)).get("token") || "";
     if (!value) {
       setStatus("This verification link is missing its token. Request a fresh email below.");
       return;
