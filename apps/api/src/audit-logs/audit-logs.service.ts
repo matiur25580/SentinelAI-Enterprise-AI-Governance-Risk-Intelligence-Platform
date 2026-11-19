@@ -22,9 +22,11 @@ function csvCell(value: unknown): string {
     ? ""
     : typeof value === "string"
       ? value
-      : value instanceof Date
-        ? value.toISOString()
-        : JSON.stringify(value);
+      : typeof value === "bigint"
+        ? value.toString()
+        : value instanceof Date
+          ? value.toISOString()
+          : JSON.stringify(value);
 
   // Prevent spreadsheet formula execution when CSVs are opened in Excel/Sheets.
   if (/^[\s]*[=+\-@]/.test(text)) text = `'${text}`;
@@ -75,7 +77,10 @@ export class AuditLogsService {
     ]);
 
     return {
-      data: items,
+      data: items.map((item) => ({
+        ...item,
+        chainSequence: item.chainSequence.toString(),
+      })),
       pagination: {
         page: query.page,
         limit: query.limit,
