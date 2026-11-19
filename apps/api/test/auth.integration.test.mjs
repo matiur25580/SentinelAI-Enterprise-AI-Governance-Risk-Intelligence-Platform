@@ -116,10 +116,201 @@ test("register, login, refresh rotation, and logout work against PostgreSQL", { 
     assert.equal(secondaryProfile.data.organization.id, secondOrganizationId);
     assert.equal(secondaryProfile.data.organization.name, "SentinelAI Secondary Workspace");
     assert.notEqual(secondaryProfile.data.organization.id, profile.data.organization.id);
+    // Use an authorized role so the cross-tenant update test reaches the
+    // tenant-scoped service and verifies its 404 non-disclosure behavior.
+    await database.query(
+      'UPDATE "Membership" SET "role" = \'OWNER\', "updatedAt" = NOW() WHERE "id" = $1',
+      [secondMembershipId],
+    );
+
+    // Auditors can read only their own workspace's compliance history.
+    await database.query('UPDATE "Membership" SET "role" = \'AUDITOR\', "updatedAt" = NOW() WHERE "id" = $1', [secondMembershipId]);
+    const secondaryAuditLogs = await request("/audit-logs", { token: secondaryLogin.data.accessToken });
+    assert.equal(secondaryAuditLogs.response.status, 200, JSON.stringify(secondaryAuditLogs.data));
+    assert.equal(secondaryAuditLogs.data.pagination.total, 1);
+    assert.ok(
+      secondaryAuditLogs.data.data.every((entry) =>
+        entry.organizationId === secondOrganizationId && entry.action === "auth.login"
+      ),
+      "A workspace must see only its own audit history, never another workspace's asset events.",
+    );
+    const secondaryIntegrity = await request("/audit-logs/integrity", {
+      token: secondaryLogin.data.accessToken,
+    });
+    assert.equal(secondaryIntegrity.response.status, 200, JSON.stringify(secondaryIntegrity.data));
+    assert.equal(secondaryIntegrity.data.verified, true);
+    const secondaryAuditExport = await request("/audit-logs/export.csv", {
+      token: secondaryLogin.data.accessToken,
+    });
+    assert.equal(secondaryAuditExport.response.status, 200);
+    assert.match(secondaryAuditExport.response.headers.get("content-type"), /text\/csv/);
+    assert.match(secondaryAuditExport.response.headers.get("content-disposition"), /attachment/);
+    assert.match(secondaryAuditExport.data.raw, /auth\.login/);
+    assert.ok(!secondaryAuditExport.data.raw.includes("Customer Support LLM"));
+    assert.ok(!secondaryAuditExport.data.raw.includes(profile.data.organization.id));
+    await database.query('UPDATE "Membership" SET "role" = \'OWNER\', "updatedAt" = NOW() WHERE "id" = $1', [secondMembershipId]);
+
+    const primaryMembership = await database.query(
+      'SELECT "id" FROM "Membership" WHERE "userId" = (SELECT "id" FROM "User" WHERE "email" = $1) AND "organizationId" = $2',
+      [email, profile.data.organization.id],
+    );
+    assert.equal(primaryMembership.rowCount, 1);
+    const primaryMembershipId = primaryMembership.rows[0].id;
+    const setPrimaryRole = async (role) => database.query(
+      'UPDATE "Membership" SET "role" = $1, "updatedAt" = NOW() WHERE "id" = $2',
+      [role, primaryMembershipId],
+    );
+
+    const createdAsset = await request("/assets", {
+      method: "POST",
+      token: register.data.accessToken,
+      body: {
+        name: "Customer Support LLM",
+        description: "Primary workspace model inventory entry",
+        assetType: "LLM_APPLICATION",
+        provider: "SentinelAI",
+        modelIdentifier: "support-assistant",
+        version: "1.0.0",
+      },
+    });
+    assert.equal(createdAsset.response.status, 201, JSON.stringify(createdAsset.data));
+    assert.equal(createdAsset.data.organizationId, profile.data.organization.id);
+    assert.equal(createdAsset.data.name, "Customer Support LLM");
+
+    const primaryAssetList = await request("/assets", { token: register.data.accessToken });
+    assert.equal(primaryAssetList.response.status, 200);
+    assert.ok(primaryAssetList.data.some((asset) => asset.id === createdAsset.data.id));
+
+    const secondaryAssetList = await request("/assets", { token: secondaryLogin.data.accessToken });
+    assert.equal(secondaryAssetList.response.status, 200);
+    assert.equal(secondaryAssetList.data.length, 0, "A workspace must not list another workspace's assets.");
+
+    const crossWorkspaceRead = await request(`/assets/${createdAsset.data.id}`, { token: secondaryLogin.data.accessToken });
+    assert.equal(crossWorkspaceRead.response.status, 404, "Cross-workspace asset reads must not disclose asset existence.");
+
+    const crossWorkspaceUpdate = await request(`/assets/${createdAsset.data.id}`, {
+      method: "PATCH",
+      token: secondaryLogin.data.accessToken,
+      body: { name: "Unauthorized overwrite" },
+    });
+    assert.equal(crossWorkspaceUpdate.response.status, 404, "Cross-workspace asset updates must be denied.");
+
+    // Workspace role changes take effect immediately for existing access tokens.
+    await setPrimaryRole("MEMBER");
+    const memberAssetList = await request("/assets", { token: register.data.accessToken });
+    assert.equal(memberAssetList.response.status, 200, "Members may read workspace assets.");
+    const memberCreateDenied = await request("/assets", {
+      method: "POST",
+      token: register.data.accessToken,
+      body: { name: "Unauthorized Asset", assetType: "LLM_APPLICATION" },
+    });
+    assert.equal(memberCreateDenied.response.status, 403, "MEMBER cannot create assets.");
+    const memberUpdateDenied = await request(`/assets/${createdAsset.data.id}`, {
+      method: "PATCH",
+      token: register.data.accessToken,
+      body: { name: "Unauthorized overwrite" },
+    });
+    assert.equal(memberUpdateDenied.response.status, 403, "MEMBER cannot update assets.");
+    const memberAuditDenied = await request("/audit-logs", { token: register.data.accessToken });
+    assert.equal(memberAuditDenied.response.status, 403, "MEMBER cannot read compliance audit logs.");
+    const memberAuditExportDenied = await request("/audit-logs/export.csv", { token: register.data.accessToken });
+    assert.equal(memberAuditExportDenied.response.status, 403, "MEMBER cannot export compliance audit logs.");
+
+    await setPrimaryRole("AI_ENGINEER");
+    const updatedAsset = await request(`/assets/${createdAsset.data.id}`, {
+      method: "PATCH",
+      token: register.data.accessToken,
+      body: { name: "Customer Support LLM v2", status: "IN_REVIEW" },
+    });
+    assert.equal(updatedAsset.response.status, 200, JSON.stringify(updatedAsset.data));
+    assert.equal(updatedAsset.data.name, "Customer Support LLM v2");
+    assert.equal(updatedAsset.data.status, "IN_REVIEW");
+
+    const engineerDeleteDenied = await request(`/assets/${createdAsset.data.id}`, {
+      method: "DELETE",
+      token: register.data.accessToken,
+    });
+    assert.equal(engineerDeleteDenied.response.status, 403, "AI_ENGINEER cannot delete assets.");
+
+    await setPrimaryRole("ADMIN");
+    const deletedAsset = await request(`/assets/${createdAsset.data.id}`, {
+      method: "DELETE",
+      token: register.data.accessToken,
+    });
+    assert.equal(deletedAsset.response.status, 200, JSON.stringify(deletedAsset.data));
+    assert.equal(deletedAsset.data.success, true);
+
+    const deletedAssetRead = await request(`/assets/${createdAsset.data.id}`, { token: register.data.accessToken });
+    assert.equal(deletedAssetRead.response.status, 404);
+
+    const auditLogs = await request("/audit-logs?entityType=AIAsset&page=1&limit=10", {
+      token: register.data.accessToken,
+    });
+    assert.equal(auditLogs.response.status, 200, JSON.stringify(auditLogs.data));
+    assert.ok(auditLogs.data.pagination.total >= 3);
+    assert.ok(auditLogs.data.data.some((entry) => entry.action === "asset.create"));
+    assert.ok(auditLogs.data.data.some((entry) => entry.action === "asset.update"));
+    assert.ok(auditLogs.data.data.some((entry) => entry.action === "asset.delete"));
+    assert.ok(auditLogs.data.data.every((entry) => entry.organizationId === profile.data.organization.id));
+    assert.ok(auditLogs.data.data.every((entry) => entry.actor?.email === email));
+
+    const primaryIntegrity = await request("/audit-logs/integrity", {
+      token: register.data.accessToken,
+    });
+    assert.equal(primaryIntegrity.response.status, 200, JSON.stringify(primaryIntegrity.data));
+    assert.equal(primaryIntegrity.data.verified, true);
+    assert.ok(primaryIntegrity.data.recordsChecked >= 4);
+
+    const auditEntryId = auditLogs.data.data[0].id;
+    await assert.rejects(
+      database.query('UPDATE "AuditLog" SET "action" = \'tampered.action\' WHERE "id" = $1', [auditEntryId]),
+      /append-only/,
+      "Database trigger must reject audit record updates.",
+    );
+    await assert.rejects(
+      database.query('DELETE FROM "AuditLog" WHERE "id" = $1', [auditEntryId]),
+      /append-only/,
+      "Database trigger must reject audit record deletion.",
+    );
+
+    const primaryAuditExport = await request("/audit-logs/export.csv?entityType=AIAsset", {
+      token: register.data.accessToken,
+    });
+    assert.equal(primaryAuditExport.response.status, 200);
+    assert.match(primaryAuditExport.data.raw, /asset\.create/);
+    assert.match(primaryAuditExport.data.raw, /asset\.update/);
+    assert.match(primaryAuditExport.data.raw, /asset\.delete/);
+    assert.ok(!primaryAuditExport.data.raw.includes(secondOrganizationId));
+
+    const filteredAuditExport = await request("/audit-logs/export.csv?action=asset.create&entityType=AIAsset", {
+      token: register.data.accessToken,
+    });
+    assert.equal(filteredAuditExport.response.status, 200);
+    assert.ok(filteredAuditExport.data.raw.includes("asset.create"));
+    assert.ok(!filteredAuditExport.data.raw.includes("asset.delete"));
+
+    const invalidExportRange = await request("/audit-logs/export.csv?from=2026-11-20T00:00:00Z&to=2026-11-19T00:00:00Z", {
+      token: register.data.accessToken,
+    });
+    assert.equal(invalidExportRange.response.status, 400);
+
+    const filteredAuditLogs = await request("/audit-logs?action=asset.create&entityType=AIAsset", {
+      token: register.data.accessToken,
+    });
+    assert.equal(filteredAuditLogs.response.status, 200);
+    assert.ok(filteredAuditLogs.data.data.length >= 1);
+    assert.ok(filteredAuditLogs.data.data.every((entry) => entry.action === "asset.create"));
+
+    const invalidAuditRange = await request("/audit-logs?from=2026-11-20T00:00:00Z&to=2026-11-19T00:00:00Z", {
+      token: register.data.accessToken,
+    });
+    assert.equal(invalidAuditRange.response.status, 400, "Invalid date ranges must be rejected.");
 
     await database.query('UPDATE "Membership" SET "isActive" = false, "updatedAt" = NOW() WHERE "id" = $1', [secondMembershipId]);
     const inactiveMembershipProfile = await request("/auth/me", { token: secondaryLogin.data.accessToken });
     assert.equal(inactiveMembershipProfile.response.status, 401, "A token tied to an inactive workspace membership must be rejected.");
+    const inactiveMembershipAssets = await request("/assets", { token: secondaryLogin.data.accessToken });
+    assert.equal(inactiveMembershipAssets.response.status, 401, "Inactive memberships must not access protected asset routes.");
 
     const inactiveMembershipLogin = await request("/auth/login", {
       method: "POST",
