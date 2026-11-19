@@ -10,6 +10,10 @@ const LIMITS: Record<string, number> = {
   login: 10,
   refresh: 30,
   logout: 30,
+  "email-verification-request": 5,
+  "email-verification-confirm": 10,
+  "password-forgot": 5,
+  "password-reset": 5,
 };
 
 @Injectable()
@@ -18,12 +22,12 @@ export class AuthRateLimitMiddleware implements NestMiddleware {
 
   async use(request: Request, response: Response, next: NextFunction) {
     const match = request.path.match(/\/auth\/(register|login|refresh|logout)\/?$/);
-    if (request.method !== "POST" || !match) {
+    if (request.method !== "POST" || (!match && !accountAction)) {
       next();
       return;
     }
 
-    const action = match[1];
+    const action = match ? match[1] : `${accountAction[1].startsWith("email") ? "email-verification" : "password"}-${accountAction[2] ?? accountAction[3]}`;
     const limit = LIMITS[action];
     const clientIp = request.ip || request.socket.remoteAddress || "unknown";
     // Hash the IP-derived identifier: the database stores no raw client addresses.
