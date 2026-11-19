@@ -48,6 +48,7 @@ model Organization {
   assets      AIAsset[]
   refreshTokens RefreshToken[]
   auditLogs   AuditLog[]
+  auditChainHead AuditChainHead?
 
   @@index([isActive])
 }
@@ -135,10 +136,22 @@ model AuditLog {
   entityId       String?
   metadata       Json?
   createdAt      DateTime     @default(now())
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  actor          User?        @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  chainSequence  BigInt       @default(0)
+  previousHash   String       @default("")
+  recordHash     String       @default("")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  actor          User?        @relation("AuditActor", fields: [actorId], references: [id], onDelete: Restrict)
 
+  @@unique([organizationId, chainSequence])
   @@index([organizationId, createdAt])
   @@index([actorId, createdAt])
   @@index([entityType, entityId])
+}
+
+model AuditChainHead {
+  organizationId String       @id
+  lastSequence   BigInt       @default(0)
+  lastHash       String       @default("")
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
 }
