@@ -21,7 +21,7 @@ export class JwtAuthGuard implements CanActivate {
     private readonly prisma: PrismaService,
     config: ConfigService,
   ) {
-    this.requireEmailVerification = config.get<boolean>("AUTH_REQUIRE_VERIFIED_EMAIL") ?? config.get<string>("NODE_ENV") === "production";
+    this.requireEmailVerification = config.get<boolean>("AUTH_REQUIRE_VERIFIED_EMAIL") ?? (config.get<string>("NODE_ENV") === "production");
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
