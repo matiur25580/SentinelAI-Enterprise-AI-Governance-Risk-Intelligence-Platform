@@ -18,10 +18,11 @@ export function recordHttpRequest(method: string, route: string, statusCode: num
   const key = labels(method, route, statusCode);
   requests.set(key, (requests.get(key) ?? 0) + 1);
 
-  let aggregate = durations.get(key);
+  const durationKey = labels(method, route);
+  let aggregate = durations.get(durationKey);
   if (!aggregate) {
     aggregate = { count: 0, sum: 0, bucketCounts: buckets.map(() => 0) };
-    durations.set(key, aggregate);
+    durations.set(durationKey, aggregate);
   }
 
   const seconds = Math.max(0, durationMs / 1000);
