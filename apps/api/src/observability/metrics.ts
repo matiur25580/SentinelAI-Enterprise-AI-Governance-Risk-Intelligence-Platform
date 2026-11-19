@@ -9,13 +9,13 @@ type Aggregate = {
 const requests = new Map<string, number>();
 const durations = new Map<string, Aggregate>();
 
-function labels(method: string, route: string): string {
+function labels(method: string, route: string, statusCode?: number): string {
   // Callers pass only HTTP methods and route templates, never raw paths.
-  return JSON.stringify([method, route]);
+  return JSON.stringify(statusCode === undefined ? [method, route] : [method, route, statusCode]);
 }
 
 export function recordHttpRequest(method: string, route: string, statusCode: number, durationMs: number): void {
-  const key = labels(method, route);
+  const key = labels(method, route, statusCode);
   requests.set(key, (requests.get(key) ?? 0) + 1);
 
   let aggregate = durations.get(key);
@@ -43,8 +43,8 @@ export function renderPrometheusMetrics(): string {
   ];
 
   for (const [key, value] of requests) {
-    const [method, route] = JSON.parse(key) as [string, string];
-    lines.push(`sentinelai_http_requests_total{method="${escapeLabel(method)}",route="${escapeLabel(route)}"} ${value}`);
+    const [method, route, statusCode] = JSON.parse(key) as [string, string, number];
+    lines.push(`sentinelai_http_requests_total{method="${escapeLabel(method)}",route="${escapeLabel(route)}",status_code="${statusCode}"} ${value}`);
   }
 
   lines.push(
