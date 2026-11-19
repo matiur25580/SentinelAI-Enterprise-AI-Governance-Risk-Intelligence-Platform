@@ -53,7 +53,13 @@ These are conservative initial suggestions, not measured service-level objective
 | TLS certificate | Expires within 14 days | Renew and verify certificate chain |
 | CI security checks | Required CodeQL or dependency audit fails on release candidate | Block release; triage and remediate |
 
-Avoid paging on a single transient sample. Use consecutive failures, minimum traffic thresholds, deduplication, and recovery notifications. Define severity and escalation ownership in the private on-call system.\n\n### Loading the starter Prometheus rules\n\nThe checked-in `ops/prometheus/alerts.yml` contains three starter rules: scrape target down, API 5xx rate above 5%, and p95 latency above 1 second. Add the file to the Prometheus `rule_files` configuration and reload Prometheus using your platform's approved process. The scrape target must use the job label `sentinelai-api`; if your deployment uses another label, update the `up{job=...}` selector before loading.\n\nThe 5xx and latency alerts include a minimum traffic guard to reduce noise on quiet services. Tune thresholds and `for` durations against measured traffic and approved SLOs. Configure Alertmanager separately with authenticated, tested receivers and escalation policies; the rule file alone does not send notifications.
+Avoid paging on a single transient sample. Use consecutive failures, minimum traffic thresholds, deduplication, and recovery notifications. Define severity and escalation ownership in the private on-call system.
+
+### Loading the starter Prometheus rules
+
+The checked-in `ops/prometheus/alerts.yml` contains three starter rules: scrape target down, API 5xx rate above 5%, and p95 latency above 1 second. Add the file to the Prometheus `rule_files` configuration and reload Prometheus using your platform's approved process. The scrape target must use the job label `sentinelai-api`; if your deployment uses another label, update the `up{job=...}` selector before loading.
+
+The 5xx and latency alerts include a minimum traffic guard to reduce noise on quiet services. Tune thresholds and `for` durations against measured traffic and approved SLOs. Configure Alertmanager separately with authenticated, tested receivers and escalation policies; the rule file alone does not send notifications.
 
 ## Logging and privacy
 
