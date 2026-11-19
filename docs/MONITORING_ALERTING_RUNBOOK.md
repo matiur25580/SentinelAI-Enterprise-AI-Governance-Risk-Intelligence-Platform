@@ -59,7 +59,7 @@ Avoid paging on a single transient sample. Use consecutive failures, minimum tra
 
 The checked-in `ops/prometheus/alerts.yml` contains three starter rules: scrape target down, API 5xx rate above 5%, and p95 latency above 1 second. Add the file to the Prometheus `rule_files` configuration and reload Prometheus using your platform's approved process. The scrape target must use the job label `sentinelai-api`; if your deployment uses another label, update the `up{job=...}` selector before loading.
 
-The 5xx and latency alerts include a minimum traffic guard to reduce noise on quiet services. Tune thresholds and `for` durations against measured traffic and approved SLOs. Configure Alertmanager separately with authenticated, tested receivers and escalation policies; the rule file alone does not send notifications.
+The 5xx and latency alerts include a minimum traffic guard to reduce noise on quiet services. Tune thresholds and `for` durations against measured traffic and approved SLOs. Configure Alertmanager separately with authenticated, tested receivers and escalation policies; the rule file alone does not send notifications. A generic HTTPS webhook starting template is available at `ops/prometheus/alertmanager.webhook.example.yml`; replace its example endpoint and provision authentication through the secret manager before enabling it.
 
 ### Importing the starter Grafana dashboard
 
