@@ -1,5 +1,6 @@
 import { Module, type NestModule, type MiddlewareConsumer } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
+import { validateEnvironment } from "./config/env.validation.js";
 import { AuthModule } from "./auth/auth.module.js";
 import { AuthController } from "./auth/auth.controller.js";
 import { AssetsModule } from "./assets/assets.module.js";
@@ -10,7 +11,11 @@ import { AuthRateLimitMiddleware } from "./security/auth-rate-limit.middleware.j
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, envFilePath: "../../.env" }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: "../../.env",
+      validate: validateEnvironment,
+    }),
     PrismaModule,
     AuthModule,
     AssetsModule,
