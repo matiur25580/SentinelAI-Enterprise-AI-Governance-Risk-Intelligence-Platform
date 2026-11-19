@@ -55,6 +55,8 @@ jobs:
         run: pnpm --filter @sentinelai/api test:integration
       - name: Test production deployment smoke checks
         run: node --test scripts/production-smoke-check.test.mjs
+      - name: Validate Prometheus and Alertmanager configuration
+        run: bash scripts/validate-monitoring-config.sh
       - name: Check required foundation files
         run: |
           test -f README.md
