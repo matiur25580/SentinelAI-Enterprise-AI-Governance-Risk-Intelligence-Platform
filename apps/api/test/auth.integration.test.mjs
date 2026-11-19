@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
+import { validateEnvironment } from "../dist/config/env.validation.js";
 import { after, before, test } from "node:test";
 import pg from "pg";
 
@@ -54,6 +55,26 @@ before(async () => {
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   throw new Error(`API did not become healthy within 30 seconds.\n${apiOutput}`);
+});
+
+test("production defaults require verified email and disable self-service registration", () => {
+  const productionConfig = {
+    NODE_ENV: "production",
+    JWT_ACCESS_SECRET: "production-access-secret-with-more-than-32-characters",
+    JWT_REFRESH_SECRET: "production-refresh-secret-with-more-than-32-characters",
+    DATABASE_URL: "postgresql://sentinelai:secret@localhost:5432/sentinelai",
+    WEB_ORIGIN: "https://app.example.com",
+    RESEND_API_KEY: "re_test_account_lifecycle_key",
+    EMAIL_FROM: "SentinelAI <security@example.com>",
+    APP_PUBLIC_URL: "https://app.example.com",
+  };
+  const validated = validateEnvironment(productionConfig);
+  assert.equal(validated.AUTH_REQUIRE_VERIFIED_EMAIL, true);
+  assert.equal(validated.ALLOW_SELF_SERVICE_REGISTRATION, false);
+  assert.throws(
+    () => validateEnvironment({ ...productionConfig, ALLOW_SELF_SERVICE_REGISTRATION: "sometimes" }),
+    /ALLOW_SELF_SERVICE_REGISTRATION must be true or false/,
+  );
 });
 
 test("Prometheus metrics endpoint requires its bearer token and exports request metrics", async () => {
