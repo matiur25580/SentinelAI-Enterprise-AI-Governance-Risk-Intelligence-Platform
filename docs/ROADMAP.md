@@ -27,7 +27,7 @@
 - [x] Incidents: tenant-scoped intake, severity triage, controlled lifecycle, and audit events
 - [ ] Notifications and human review
 - [x] Auditor audit-trail filtering, integrity verification, and CSV export
-- [x] Executive governance and compliance reporting (organization-scoped metrics, date filters, audit activity, CSV export)
+- [x] Executive governance and compliance reporting (organization-scoped metrics, date filters, audit activity, CSV export)\n- [x] Downloadable governance audit package (PDF, JSON and CSV ZIP export with tenant scoping, export audit event and integrity metadata)
 
 ## Milestone 6 — Production readiness
 - [ ] Automated tests and CI/CD
