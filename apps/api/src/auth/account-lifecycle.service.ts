@@ -162,6 +162,7 @@ export class AccountLifecycleService {
     });
 
     await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${action.userId} FOR UPDATE`;
       const consumed = await tx.accountActionToken.updateMany({
         where: {
           id: action.id,
@@ -174,6 +175,14 @@ export class AccountLifecycleService {
       if (consumed.count !== 1) {
         throw new UnauthorizedException("The account action token is invalid or expired.");
       }
+      await tx.accountActionToken.updateMany({
+        where: {
+          userId: action.userId,
+          purpose: AccountActionTokenPurpose.PASSWORD_RESET,
+          consumedAt: null,
+        },
+        data: { consumedAt: now },
+      });
       const updated = await tx.user.updateMany({
         where: { id: action.userId, isActive: true },
         data: { passwordHash },
