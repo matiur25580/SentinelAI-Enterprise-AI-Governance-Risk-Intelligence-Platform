@@ -357,6 +357,21 @@ test("register, login, refresh rotation, and logout work against PostgreSQL", { 
   });
   assert.equal(invalidLogin.response.status, 401);
 
+  const sessionLogin = await request("/auth/login", { method: "POST", body: { email, password } });
+  assert.equal(sessionLogin.response.status, 201, JSON.stringify(sessionLogin.data));
+  const sessionPayload = JSON.parse(Buffer.from(sessionLogin.data.refreshToken.split(".")[1], "base64url").toString("utf8"));
+  const sessions = await request("/auth/sessions", { token: sessionLogin.data.accessToken });
+  assert.equal(sessions.response.status, 200, JSON.stringify(sessions.data));
+  assert.ok(sessions.data.data.some((session) => session.sessionId === sessionPayload.familyId));
+  const revokedSession = await request("/auth/sessions/" + sessionPayload.familyId, { method: "DELETE", token: sessionLogin.data.accessToken });
+  assert.equal(revokedSession.response.status, 200, JSON.stringify(revokedSession.data));
+  assert.ok(revokedSession.data.revokedTokenCount >= 1);
+  const revokedSessionRefresh = await request("/auth/refresh", { method: "POST", body: { refreshToken: sessionLogin.data.refreshToken } });
+  assert.equal(revokedSessionRefresh.response.status, 401, "Revoking a session must invalidate its refresh token family.");
+  const revokedSessionAudit = await request("/audit-logs?action=auth.session.revoke", { token: sessionLogin.data.accessToken });
+  assert.equal(revokedSessionAudit.response.status, 200);
+  assert.ok(revokedSessionAudit.data.data.some((entry) => entry.entityId === sessionPayload.familyId));
+
   const login = await request("/auth/login", {
     method: "POST",
     body: { email, password },
