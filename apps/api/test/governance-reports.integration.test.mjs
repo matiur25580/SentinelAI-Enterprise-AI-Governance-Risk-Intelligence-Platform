@@ -17,7 +17,31 @@ async function resetAuthRateLimits() {
   finally { await database.end(); }
 }
 
-async function requestBuffer(path, { token } = {}) {\n  const response = await fetch(`${baseUrl}${path}`, { headers: { authorization: `Bearer ${token}` } });\n  return { response, buffer: Buffer.from(await response.arrayBuffer()) };\n}\n\nfunction unzipLocalEntries(buffer) {\n  const entries = new Map();\n  let offset = 0;\n  while (offset + 30 <= buffer.length && buffer.readUInt32LE(offset) === 0x04034b50) {\n    const method = buffer.readUInt16LE(offset + 8);\n    const compressedSize = buffer.readUInt32LE(offset + 18);\n    const nameLength = buffer.readUInt16LE(offset + 26);\n    const extraLength = buffer.readUInt16LE(offset + 28);\n    const nameStart = offset + 30;\n    const dataStart = nameStart + nameLength + extraLength;\n    const name = buffer.subarray(nameStart, nameStart + nameLength).toString("utf8");\n    const compressed = buffer.subarray(dataStart, dataStart + compressedSize);\n    assert.equal(method, 8, "ZIP entries use DEFLATE");\n    entries.set(name, inflateRawSync(compressed));\n    offset = dataStart + compressedSize;\n  }\n  return entries;\n}\n\nasync function request(path, { method = "GET", body, token } = {}) {
+async function requestBuffer(path, { token } = {}) {
+  const response = await fetch(`${baseUrl}${path}`, { headers: { authorization: `Bearer ${token}` } });
+  return { response, buffer: Buffer.from(await response.arrayBuffer()) };
+}
+
+function unzipLocalEntries(buffer) {
+  const entries = new Map();
+  let offset = 0;
+  while (offset + 30 <= buffer.length && buffer.readUInt32LE(offset) === 0x04034b50) {
+    const method = buffer.readUInt16LE(offset + 8);
+    const compressedSize = buffer.readUInt32LE(offset + 18);
+    const nameLength = buffer.readUInt16LE(offset + 26);
+    const extraLength = buffer.readUInt16LE(offset + 28);
+    const nameStart = offset + 30;
+    const dataStart = nameStart + nameLength + extraLength;
+    const name = buffer.subarray(nameStart, nameStart + nameLength).toString("utf8");
+    const compressed = buffer.subarray(dataStart, dataStart + compressedSize);
+    assert.equal(method, 8, "ZIP entries use DEFLATE");
+    entries.set(name, inflateRawSync(compressed));
+    offset = dataStart + compressedSize;
+  }
+  return entries;
+}
+
+async function request(path, { method = "GET", body, token } = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
     method,
     headers: { ...(body ? { "content-type": "application/json" } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}) },
@@ -47,7 +71,7 @@ before(async () => {
   throw new Error(`API did not become healthy.\n${apiOutput}`);
 });
 
-test("governance report aggregates stay organization-scoped and export as CSV", { timeout: 90_000 }, async () => {
+test("governance report and downloadable PDF/ZIP audit package stay organization-scoped", { timeout: 90_000 }, async () => {
   const suffix = Date.now();
   const password = "Governance-Report-Integration-2026!";
   const owner = await request("/auth/register", { method: "POST", body: {
