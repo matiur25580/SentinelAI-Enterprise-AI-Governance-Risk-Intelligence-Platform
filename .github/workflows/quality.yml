@@ -9,15 +9,34 @@ permissions:
   contents: read
 
 jobs:
-  repository-checks:
+  build:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://sentinelai:sentinelai@localhost:5432/sentinelai?schema=public
+      JWT_ACCESS_SECRET: ci-only-access-secret-change-me-32-characters
+      JWT_REFRESH_SECRET: ci-only-refresh-secret-change-me-32-characters
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm db:generate
+      - name: Type check
+        run: pnpm typecheck
+      - name: Build workspaces
+        run: pnpm build
       - name: Check required foundation files
         run: |
           test -f README.md
-          test -f package.json
-          test -f docker-compose.yml
+          test -f apps/api/prisma/schema.prisma
+          test -f apps/api/prisma/migrations/20261119000000_init/migration.sql
           test -f docs/ARCHITECTURE.md
       - name: Check for committed environment files
         run: |
