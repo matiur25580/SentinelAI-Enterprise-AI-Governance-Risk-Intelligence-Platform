@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "pnpm --parallel --filter @sentinelai/web --filter @sentinelai/api dev",
-    "build": "pnpm -r build",
+    "build": "pnpm --filter @sentinelai/api db:generate && pnpm -r build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "format": "prettier --write .",
@@ -17,7 +17,8 @@
     "infra:down": "docker compose down",
     "db:generate": "pnpm --filter @sentinelai/api db:generate",
     "db:migrate": "pnpm --filter @sentinelai/api db:migrate",
-    "db:deploy": "pnpm --filter @sentinelai/api db:deploy"
+    "db:deploy": "pnpm --filter @sentinelai/api db:deploy",
+    "db:studio": "pnpm --filter @sentinelai/api db:studio"
   },
   "devDependencies": {
     "prettier": "^3.4.2",
