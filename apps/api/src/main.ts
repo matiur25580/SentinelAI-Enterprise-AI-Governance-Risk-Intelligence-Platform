@@ -15,7 +15,7 @@ async function bootstrap() {
     app.getHttpAdapter().getInstance().set("trust proxy", parsedHops);
   }
   app.enableCors({
-    origin: process.env.WEB_ORIGIN?.split(",") ?? ["http://localhost:3000"],
+    origin: process.env.WEB_ORIGIN?.split(",").map((origin) => origin.trim()).filter(Boolean) ?? ["http://localhost:3000"],
     credentials: true,
   });
   app.useGlobalPipes(
