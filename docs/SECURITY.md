@@ -12,7 +12,9 @@ This document is an engineering baseline, not a security certification.
 ## Application security
 
 - Validate all request bodies, query parameters, and uploaded files.
-- Apply rate limits to authentication, API keys, and expensive AI operations.
+- Apply database-backed, per-client-IP rate limits to authentication endpoints: registration (5), login (10), refresh (30), and logout (30) requests per 15-minute window.
+- Rate-limit buckets use hashed client identifiers and are shared across API replicas through PostgreSQL. Requests fail closed if the limiter store is unavailable.
+- Behind a reverse proxy, configure TRUST_PROXY_HOPS to the exact number of trusted proxy hops. Do not enable proxy trust for arbitrary/untrusted proxies; otherwise clients may spoof their IP and bypass IP-based limits.
 - Use secure headers, TLS, restrictive CORS, and CSRF protection where cookie-based auth is used.
 - Use parameterized database access; never concatenate user input into SQL.
 - Redact credentials, tokens, and sensitive personal data from logs.
