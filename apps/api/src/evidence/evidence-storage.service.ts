@@ -142,7 +142,7 @@ export class EvidenceStorageService {
     return this.prisma.$transaction(async (tx) => {
       const changed = await tx.evidenceFile.updateMany({
         where: { id: evidenceId, organizationId: auth.organizationId, status: EvidenceFileStatus.PENDING_UPLOAD },
-        data: { status: nextStatus, uploadedAt: new Date(), retentionExpiresAt: scan.clean ? null : this.retentionExpiry() },
+        data: { status: nextStatus, uploadedAt: new Date(), retentionExpiresAt: this.retentionExpiry() },
       });
       if (changed.count !== 1) throw new ConflictException("Evidence state changed; reload and try again.");
       const result = await tx.evidenceFile.findUniqueOrThrow({ where: { id: evidenceId } });
@@ -272,7 +272,7 @@ export class EvidenceStorageService {
     return this.prisma.$transaction(async (tx) => {
       const changed = await tx.evidenceFile.updateMany({
         where: { id: evidenceId, organizationId: auth.organizationId, status: EvidenceFileStatus.QUARANTINED },
-        data: { status: nextStatus, ...(scan.clean ? { retentionExpiresAt: null } : {}) },
+        data: { status: nextStatus, ...(scan.clean ? { retentionExpiresAt: this.retentionExpiry() } : {}) },
       });
       if (changed.count !== 1) throw new ConflictException("Evidence state changed; reload and try again.");
       await tx.auditLog.create({
