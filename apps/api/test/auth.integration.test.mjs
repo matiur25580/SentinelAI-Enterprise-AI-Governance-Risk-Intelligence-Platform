@@ -373,7 +373,7 @@ test("register, login, refresh rotation, and logout work against PostgreSQL", { 
   const blockedAttempt = rateLimitResults.findIndex((result) => result.response.status === 429);
   assert.ok(
     blockedAttempt >= 0 && blockedAttempt <= 10,
-    "A login request must be rate limited after no more than 10 attempts in the shared 15-minute window.",
+    `A login request must be rate limited after no more than 10 attempts in the shared 15-minute window. Observed: ${rateLimitResults.map((result) => `${result.response.status}:${result.response.headers.get("ratelimit-remaining") ?? "no-header"}`).join(", ")}`,
   );
   assert.ok(
     rateLimitResults.slice(0, blockedAttempt).every((result) => result.response.status === 401),
