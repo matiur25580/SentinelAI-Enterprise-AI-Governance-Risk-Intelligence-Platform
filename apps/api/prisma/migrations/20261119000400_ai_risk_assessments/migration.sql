@@ -20,6 +20,7 @@ CREATE TABLE "RiskAssessment" (
   "residualScore" DOUBLE PRECISION NOT NULL,
   "inherentLevel" "RiskLevel" NOT NULL,
   "residualLevel" "RiskLevel" NOT NULL,
+  "scoringVersion" TEXT NOT NULL DEFAULT 'sentinelai-risk-v1',
   "evidence" JSONB NOT NULL,
   "status" "RiskAssessmentStatus" NOT NULL DEFAULT 'DRAFT',
   "reviewRationale" TEXT,
