@@ -22,6 +22,7 @@ export class AuthRateLimitMiddleware implements NestMiddleware {
 
   async use(request: Request, response: Response, next: NextFunction) {
     const match = request.path.match(/\/auth\/(register|login|refresh|logout)\/?$/);
+    const accountAction = request.path.match(/\/auth\/(email\/verification\/(request|confirm)|password\/(forgot|reset))\/?$/);
     if (request.method !== "POST" || (!match && !accountAction)) {
       next();
       return;
