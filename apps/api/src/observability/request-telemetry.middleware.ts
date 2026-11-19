@@ -17,7 +17,7 @@ export function requestTelemetryMiddleware(
   response.on("finish", () => {
     const routePath = request.route?.path;
     const route = typeof routePath === "string"
-      ? `${request.baseUrl}${routePath}`.replace(/\\/+$/, "") || "/"
+      ? (routePath === "/" ? request.baseUrl || "/" : `${request.baseUrl}${routePath}`)
       : "unmatched";
 
     console.log(JSON.stringify({
