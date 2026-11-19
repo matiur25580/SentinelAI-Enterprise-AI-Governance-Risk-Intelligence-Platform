@@ -2,19 +2,25 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
+type Asset = { id: string; name: string; assetType: string };
 type Assessment = {
-  id: string; title: string; status: "DRAFT" | "IN_REVIEW" | "APPROVED" | "REJECTED";
-  residualLevel: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"; inherentScore: number; residualScore: number;
-  scoringVersion: string; createdAt: string; submittedAt?: string | null; reviewRationale?: string | null;
+  id: string; title: string; scope?: string; intendedUse?: string; status: "DRAFT" | "IN_REVIEW" | "APPROVED" | "REJECTED";
+  residualLevel: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"; inherentScore: number; residualScore: number; scoringVersion: string;
+  createdAt: string; evidence?: string[]; dataSensitivity?: number; autonomyLevel?: number; impact?: number;
+  likelihood?: number; exposure?: number; mitigationCoverage?: number; reviewRationale?: string | null;
   asset: { id: string; name: string; assetType: string };
+  createdByMembership?: { user: { name: string } }; reviewedByMembership?: { user: { name: string } } | null;
 };
-type Profile = { user: { name: string; email: string }; organization: { name: string; slug: string }; role: string };
+type Profile = { user: { name: string }; organization: { name: string }; role: string };
+type FormState = { assetId: string; title: string; scope: string; intendedUse: string; dataSensitivity: number; autonomyLevel: number; impact: number; likelihood: number; exposure: number; mitigationCoverage: number; evidenceText: string };
 const API = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1").replace(/\/$/, "");
+const initialForm: FormState = { assetId: "", title: "", scope: "", intendedUse: "", dataSensitivity: 3, autonomyLevel: 2, impact: 3, likelihood: 3, exposure: 3, mitigationCoverage: 0, evidenceText: "" };
 
 export default function RiskAssessmentsPage() {
   const [token, setToken] = useState("");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [items, setItems] = useState<Assessment[]>([]);
+  const [assets, setAssets] = useState<Asset[]>([]);
   const [status, setStatus] = useState("");
   const [level, setLevel] = useState("");
   const [email, setEmail] = useState("");
@@ -23,14 +29,16 @@ export default function RiskAssessmentsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState<FormState>(initialForm);
+  const [detail, setDetail] = useState<Assessment | null>(null);
+  const [review, setReview] = useState<{ id: string; decision: "APPROVED" | "REJECTED" } | null>(null);
+  const [rationale, setRationale] = useState("");
 
   const api = useCallback(async (path: string, options: RequestInit = {}) => {
-    const response = await fetch(`${API}${path}`, {
-      ...options,
-      headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}), ...options.headers },
-    });
+    const response = await fetch(API + path, { ...options, headers: { "content-type": "application/json", ...(token ? { authorization: "Bearer " + token } : {}), ...options.headers } });
     const body = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(body.message || `Request failed (${response.status})`);
+    if (!response.ok) throw new Error(Array.isArray(body.message) ? body.message.join(" ") : body.message || "Request failed (" + response.status + ")");
     return body;
   }, [token]);
 
@@ -38,62 +46,118 @@ export default function RiskAssessmentsPage() {
     const params = new URLSearchParams();
     if (status) params.set("status", status);
     if (level) params.set("residualLevel", level);
-    const result = await api(`/risk-assessments?${params.toString()}`);
+    const result = await api("/risk-assessments?" + params.toString());
     setItems(result.data || []);
   }, [api, status, level]);
 
   useEffect(() => {
     if (!token) return;
     let active = true;
-    api("/auth/me").then((data) => { if (active) setProfile(data); })
-      .then(() => load())
-      .catch((err: Error) => { if (active) { setError(err.message); setToken(""); setProfile(null); } });
+    Promise.all([api("/auth/me"), api("/assets")]).then(([user, list]) => {
+      if (active) { setProfile(user); setAssets(list || []); }
+    }).catch((err: Error) => { if (active) { setError(err.message); setToken(""); setProfile(null); } });
     return () => { active = false; };
-  }, [token, api, load]);
+  }, [token, api]);
+
+  useEffect(() => {
+    if (!token) return;
+    let active = true;
+    load().catch((err: Error) => { if (active) setError(err.message); });
+    return () => { active = false; };
+  }, [token, load]);
 
   async function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError("");
     try {
-      const result = await fetch(`${API}/auth/login`, {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password, ...(workspace ? { organizationSlug: workspace } : {}) }),
-      });
-      const data = await result.json().catch(() => ({}));
-      if (!result.ok) throw new Error(data.message || "Unable to sign in.");
+      const response = await fetch(API + "/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password, ...(workspace ? { organizationSlug: workspace } : {}) }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "Unable to sign in.");
       setToken(data.accessToken); setPassword("");
     } catch (err) { setError(err instanceof Error ? err.message : "Unable to sign in."); }
     finally { setBusy(false); }
   }
 
-  async function transition(id: string, action: "submit" | "decision", decision?: "APPROVED" | "REJECTED") {
-    setBusy(true); setError(""); setMessage("");
+  async function createAssessment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setError(""); setMessage("");
     try {
-      const body = action === "decision" ? { decision, rationale: decision === "APPROVED" ? "Approved after independent governance review." : "Rejected pending remediation and resubmission." } : undefined;
-      await api(`/risk-assessments/${id}/${action}`, { method: "POST", ...(body ? { body: JSON.stringify(body) } : {}) });
-      await load(); setMessage(action === "submit" ? "Assessment submitted for independent review." : `Assessment ${decision?.toLowerCase()}.`);
-    } catch (err) { setError(err instanceof Error ? err.message : "The action could not be completed."); }
+      const evidence = form.evidenceText.split("\n").map(v => v.trim()).filter(Boolean);
+      if (evidence.length > 30) throw new Error("Add no more than 30 evidence references.");
+      await api("/assets/" + form.assetId + "/risk-assessments", { method: "POST", body: JSON.stringify({
+        title: form.title, scope: form.scope, intendedUse: form.intendedUse, dataSensitivity: form.dataSensitivity,
+        autonomyLevel: form.autonomyLevel, impact: form.impact, likelihood: form.likelihood, exposure: form.exposure,
+        mitigationCoverage: form.mitigationCoverage, evidence
+      }) });
+      setShowCreate(false); setForm(initialForm); await load();
+      setMessage("Draft created. Risk scores were calculated by the authoritative API.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Assessment could not be created."); }
     finally { setBusy(false); }
   }
 
+  async function openDetail(id: string) {
+    try { setDetail(await api("/risk-assessments/" + id)); }
+    catch (err) { setError(err instanceof Error ? err.message : "Unable to load assessment."); }
+  }
+
+  async function submitDraft(id: string) {
+    setBusy(true); setError(""); setMessage("");
+    try { await api("/risk-assessments/" + id + "/submit", { method: "POST" }); await load(); if (detail?.id === id) await openDetail(id); setMessage("Assessment submitted for independent review."); }
+    catch (err) { setError(err instanceof Error ? err.message : "Submission failed."); }
+    finally { setBusy(false); }
+  }
+
+  async function decide(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (!review) return; setBusy(true); setError(""); setMessage("");
+    try {
+      await api("/risk-assessments/" + review.id + "/decision", { method: "POST", body: JSON.stringify({ decision: review.decision, rationale }) });
+      const decision = review.decision; setReview(null); setRationale(""); await load();
+      if (detail?.id) await openDetail(detail.id);
+      setMessage("Assessment " + decision.toLowerCase() + "; reviewer rationale recorded.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Review decision failed."); }
+    finally { setBusy(false); }
+  }
+
+  const setField = (key: keyof FormState, value: string | number) => setForm(current => ({ ...current, [key]: value }));
   const counts = { open: items.filter(x => x.status === "DRAFT" || x.status === "IN_REVIEW").length, critical: items.filter(x => x.residualLevel === "CRITICAL").length, approved: items.filter(x => x.status === "APPROVED").length };
-  return (
-    <main className="risk-shell">
-      <header className="risk-header">
-        <a className="risk-brand" href="/"><span className="risk-logo">S</span><span>sentinel<span>ai</span><small>GOVERNANCE PLATFORM</small></span></a>
-        <nav><a href="/">Overview</a><a className="selected" href="/risk-assessments">Risk intelligence</a></nav>
-        <span className="risk-env"><i /> SECURE WORKSPACE</span>
-      </header>
-      <section className="risk-content">
-        <div className="risk-heading"><div><div className="risk-kicker">GOVERNANCE / RISK INTELLIGENCE</div><h1>Risk assessment console</h1><p>Evidence-backed risk reviews, independent decisions, and traceable governance.</p></div>{profile && <div className="risk-user"><strong>{profile.user.name}</strong><span>{profile.organization.name} · {profile.role.replaceAll("_", " ")}</span><button onClick={() => { setToken(""); setProfile(null); setItems([]); }}>Sign out</button></div>}</div>
-        {!token ? <section className="risk-login"><div className="risk-login-mark">↗</div><h2>Sign in to your workspace</h2><p>Use your SentinelAI account to view organization-scoped assessments. Your credentials are sent only to the configured API.</p><form onSubmit={login}><label>Email address<input type="email" required autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@company.com" /></label><label>Password<input type="password" required minLength={12} autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Your account password" /></label><label>Workspace slug <span>(only if you belong to multiple)</span><input value={workspace} onChange={e => setWorkspace(e.target.value)} placeholder="company-workspace" /></label><button className="risk-primary" disabled={busy}>{busy ? "Signing in…" : "Sign in securely"}</button></form><small>API endpoint: {API}</small></section> :
-        <>
-          <div className="risk-summary"><article><span>ASSESSMENTS SHOWN</span><strong>{items.length}</strong><small>Current filtered view</small></article><article><span>OPEN WORK</span><strong>{counts.open}</strong><small>Draft or awaiting review</small></article><article><span>CRITICAL EXPOSURE</span><strong className="critical-number">{counts.critical}</strong><small>Residual risk · current view</small></article><article><span>APPROVED</span><strong>{counts.approved}</strong><small>Completed decisions</small></article></div>
-          <div className="risk-toolbar"><div><h2>Assessment register</h2><p>Only records belonging to your authenticated workspace are returned.</p></div><div className="risk-filters"><select value={status} onChange={e => setStatus(e.target.value)}><option value="">All statuses</option><option>DRAFT</option><option>IN_REVIEW</option><option>APPROVED</option><option>REJECTED</option></select><select value={level} onChange={e => setLevel(e.target.value)}><option value="">All risk levels</option><option>LOW</option><option>MEDIUM</option><option>HIGH</option><option>CRITICAL</option></select><button onClick={() => load().catch(e => setError(e.message))}>Refresh</button></div></div>
-          <div className="risk-table-wrap"><table className="risk-table"><thead><tr><th>ASSESSMENT</th><th>AI ASSET</th><th>RESIDUAL RISK</th><th>SCORE</th><th>STATUS</th><th>CREATED</th><th>ACTIONS</th></tr></thead><tbody>{items.map(item => <tr key={item.id}><td><strong>{item.title}</strong><small>{item.id.slice(0, 10)} · {item.scoringVersion}</small></td><td>{item.asset.name}<small>{item.asset.assetType.replaceAll("_", " ")}</small></td><td><span className={`risk-level ${item.residualLevel.toLowerCase()}`}>{item.residualLevel}</span></td><td><strong>{item.residualScore.toFixed(1)}</strong><small>Inherent {item.inherentScore.toFixed(1)}</small></td><td><span className={`risk-status ${item.status.toLowerCase()}`}>{item.status.replaceAll("_", " ")}</span></td><td>{new Date(item.createdAt).toLocaleDateString()}</td><td><div className="risk-actions">{item.status === "DRAFT" && <button disabled={busy} onClick={() => transition(item.id, "submit")}>Submit</button>}{item.status === "IN_REVIEW" && <><button disabled={busy} onClick={() => transition(item.id, "decision", "APPROVED")}>Approve</button><button className="reject" disabled={busy} onClick={() => transition(item.id, "decision", "REJECTED")}>Reject</button></>}</div></td></tr>)}</tbody></table>{items.length === 0 && <div className="risk-empty"><span>◇</span><strong>No assessments in this view</strong><p>Adjust filters or create an assessment through the authenticated API.</p></div>}</div>
-          <div className="risk-footnote">Risk scores are versioned project-specific triage heuristics, not regulatory certifications or compliance determinations.</div>
-        </>}
-        {error && <div className="risk-alert error" role="alert">{error}</div>}{message && <div className="risk-alert success" role="status">{message}</div>}
-      </section>
-    </main>
-  );
+
+  return <main className="risk-shell">
+    <header className="risk-header"><a className="risk-brand" href="/"><span className="risk-logo">S</span><span>sentinel<span>ai</span><small>GOVERNANCE PLATFORM</small></span></a><nav><a href="/">Overview</a><a className="selected" href="/risk-assessments">Risk intelligence</a></nav><span className="risk-env"><i /> SECURE WORKSPACE</span></header>
+    <section className="risk-content">
+      <div className="risk-heading"><div><div className="risk-kicker">GOVERNANCE / RISK INTELLIGENCE</div><h1>Risk assessment console</h1><p>Evidence-backed risk reviews, independent decisions, and traceable governance.</p></div>{profile && <div className="risk-user"><strong>{profile.user.name}</strong><span>{profile.organization.name} · {profile.role.replaceAll("_", " ")}</span><button onClick={() => { setToken(""); setProfile(null); setItems([]); setAssets([]); }}>Sign out</button></div>}</div>
+      {!token ? <section className="risk-login"><div className="risk-login-mark">↗</div><h2>Sign in to your workspace</h2><p>Use your SentinelAI account to view organization-scoped assessments.</p><form onSubmit={login}><label>Email address<input type="email" required autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} /></label><label>Password<input type="password" required minLength={12} autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} /></label><label>Workspace slug <span>(if required)</span><input value={workspace} onChange={e => setWorkspace(e.target.value)} /></label><button className="risk-primary" disabled={busy}>{busy ? "Signing in…" : "Sign in securely"}</button></form><small>API endpoint: {API}</small></section> :
+      <>
+        <div className="risk-summary"><article><span>ASSESSMENTS SHOWN</span><strong>{items.length}</strong><small>Current filtered view</small></article><article><span>OPEN WORK</span><strong>{counts.open}</strong><small>Draft or awaiting review</small></article><article><span>CRITICAL EXPOSURE</span><strong className="critical-number">{counts.critical}</strong><small>Residual risk · current view</small></article><article><span>APPROVED</span><strong>{counts.approved}</strong><small>Completed decisions</small></article></div>
+        <div className="risk-toolbar"><div><h2>Assessment register</h2><p>Organization-scoped records from the authenticated API.</p></div><div className="risk-filters"><select value={status} onChange={e => setStatus(e.target.value)}><option value="">All statuses</option><option>DRAFT</option><option>IN_REVIEW</option><option>APPROVED</option><option>REJECTED</option></select><select value={level} onChange={e => setLevel(e.target.value)}><option value="">All risk levels</option><option>LOW</option><option>MEDIUM</option><option>HIGH</option><option>CRITICAL</option></select><button onClick={() => load().catch(e => setError(e.message))}>Refresh</button><button className="risk-create-button" onClick={() => { setError(""); setShowCreate(true); }}>＋ New assessment</button></div></div>
+        <div className="risk-table-wrap"><table className="risk-table"><thead><tr><th>ASSESSMENT</th><th>AI ASSET</th><th>RESIDUAL RISK</th><th>SCORE</th><th>STATUS</th><th>CREATED</th><th>ACTIONS</th></tr></thead><tbody>{items.map(item => <tr key={item.id}><td><button className="risk-link-button" onClick={() => openDetail(item.id)}><strong>{item.title}</strong></button><small>{item.id.slice(0, 10)} · {item.scoringVersion}</small></td><td>{item.asset.name}<small>{item.asset.assetType.replaceAll("_", " ")}</small></td><td><span className={"risk-level " + item.residualLevel.toLowerCase()}>{item.residualLevel}</span></td><td><strong>{item.residualScore.toFixed(1)}</strong><small>Inherent {item.inherentScore.toFixed(1)}</small></td><td><span className={"risk-status " + item.status.toLowerCase()}>{item.status.replaceAll("_", " ")}</span></td><td>{new Date(item.createdAt).toLocaleDateString()}</td><td><div className="risk-actions">{item.status === "DRAFT" && <button disabled={busy} onClick={() => submitDraft(item.id)}>Submit</button>}{item.status === "IN_REVIEW" && <><button disabled={busy} onClick={() => { setReview({ id: item.id, decision: "APPROVED" }); setRationale(""); }}>Approve</button><button className="reject" disabled={busy} onClick={() => { setReview({ id: item.id, decision: "REJECTED" }); setRationale(""); }}>Reject</button></>}</div></td></tr>)}</tbody></table>{items.length === 0 && <div className="risk-empty"><span>◇</span><strong>No assessments in this view</strong><p>Create an assessment for an AI asset or adjust the filters.</p></div>}</div>
+        <div className="risk-footnote">Risk scores are project-specific triage heuristics, not regulatory certifications or compliance determinations.</div>
+      </>}
+      {error && <div className="risk-alert error" role="alert">{error}</div>}{message && <div className="risk-alert success" role="status">{message}</div>}
+    </section>
+
+    {showCreate && <div className="risk-modal-backdrop" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) setShowCreate(false); }}><section className="risk-modal risk-create-modal" role="dialog" aria-modal="true" aria-labelledby="create-title"><div className="risk-modal-heading"><div><div className="risk-kicker">NEW GOVERNANCE RECORD</div><h2 id="create-title">Create risk assessment</h2><p>Capture intended use, risk context, and supporting evidence.</p></div><button className="risk-close" onClick={() => setShowCreate(false)} aria-label="Close">×</button></div>
+      <form onSubmit={createAssessment}>
+        <label className="risk-field full">AI asset<select required value={form.assetId} onChange={e => setField("assetId", e.target.value)}><option value="">Select an organization asset…</option>{assets.map(a => <option key={a.id} value={a.id}>{a.name} · {a.assetType.replaceAll("_", " ")}</option>)}</select>{assets.length === 0 && <small>Create an AI asset before assessing its risk.</small>}</label>
+        <label className="risk-field full">Assessment title<input required minLength={3} maxLength={160} value={form.title} onChange={e => setField("title", e.target.value)} placeholder="Production customer support assistant" /></label>
+        <label className="risk-field full">Assessment scope<textarea required minLength={10} maxLength={3000} rows={3} value={form.scope} onChange={e => setField("scope", e.target.value)} placeholder="Systems, users, data flows, boundaries, and exclusions…" /></label>
+        <label className="risk-field full">Intended use<textarea required minLength={10} maxLength={2000} rows={3} value={form.intendedUse} onChange={e => setField("intendedUse", e.target.value)} placeholder="What the AI system does and who relies on it…" /></label>
+        <div className="risk-form-section">RISK DIMENSIONS <span>Validated and scored by the API</span></div>
+        <label className="risk-field">Data sensitivity<select value={form.dataSensitivity} onChange={e => setField("dataSensitivity", Number(e.target.value))}>{[1,2,3,4,5].map(v => <option key={v} value={v}>{v} · {["Public","Internal","Confidential","Sensitive","Highly sensitive"][v-1]}</option>)}</select></label>
+        <label className="risk-field">Autonomy level<select value={form.autonomyLevel} onChange={e => setField("autonomyLevel", Number(e.target.value))}>{[1,2,3,4,5].map(v => <option key={v} value={v}>{v}</option>)}</select></label>
+        {(["impact","likelihood","exposure"] as const).map(key => <label className="risk-field" key={key}>{key[0].toUpperCase()+key.slice(1)} (1–5)<select value={form[key]} onChange={e => setField(key, Number(e.target.value))}>{[1,2,3,4,5].map(v => <option key={v} value={v}>{v}</option>)}</select></label>)}
+        <label className="risk-field">Mitigation coverage (%)<input type="number" min={0} max={100} required value={form.mitigationCoverage} onChange={e => setField("mitigationCoverage", Number(e.target.value))} /></label>
+        <label className="risk-field full">Evidence references <span className="risk-field-hint">One URL or document identifier per line, maximum 30. References only; no file upload or verification is implied.</span><textarea rows={4} value={form.evidenceText} onChange={e => setField("evidenceText", e.target.value)} placeholder={"https://example.com/model-card\nGRC-2026-014"} /></label>
+        <div className="risk-modal-actions"><button type="button" className="risk-secondary" onClick={() => setShowCreate(false)}>Cancel</button><button className="risk-primary" disabled={busy || !form.assetId || assets.length === 0}>{busy ? "Creating…" : "Create draft assessment"}</button></div>
+      </form></section></div>}
+
+    {detail && <div className="risk-modal-backdrop" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) setDetail(null); }}><section className="risk-modal risk-detail-modal" role="dialog" aria-modal="true" aria-labelledby="detail-title"><div className="risk-modal-heading"><div><div className="risk-kicker">ASSESSMENT RECORD · {detail.id.slice(0, 12)}</div><h2 id="detail-title">{detail.title}</h2><p>{detail.asset.name} · {detail.asset.assetType.replaceAll("_", " ")}</p></div><button className="risk-close" onClick={() => setDetail(null)} aria-label="Close">×</button></div>
+      <div className="risk-detail-grid"><article><span>RESIDUAL RISK</span><strong className={"risk-level " + detail.residualLevel.toLowerCase()}>{detail.residualLevel}</strong></article><article><span>RESIDUAL SCORE</span><strong>{detail.residualScore.toFixed(2)}</strong></article><article><span>INHERENT SCORE</span><strong>{detail.inherentScore.toFixed(2)}</strong></article><article><span>LIFECYCLE</span><strong>{detail.status.replaceAll("_", " ")}</strong></article></div>
+      <div className="risk-detail-section"><h3>Scope</h3><p>{detail.scope || "Not provided."}</p></div><div className="risk-detail-section"><h3>Intended use</h3><p>{detail.intendedUse || "Not provided."}</p></div>
+      <div className="risk-detail-section"><h3>Risk dimensions</h3><div className="risk-dimension-list">{[["Data sensitivity",detail.dataSensitivity],["Autonomy level",detail.autonomyLevel],["Impact",detail.impact],["Likelihood",detail.likelihood],["Exposure",detail.exposure],["Mitigation coverage",detail.mitigationCoverage === undefined ? "—" : detail.mitigationCoverage + "%"]].map(([label,value]) => <span key={String(label)}>{label}<strong>{value ?? "—"}</strong></span>)}</div></div>
+      <div className="risk-detail-section"><h3>Evidence references ({detail.evidence?.length || 0})</h3>{detail.evidence?.length ? <ul className="risk-evidence-list">{detail.evidence.map((entry,index) => <li key={index}>{/^https?:\/\//i.test(entry) ? <a href={entry} target="_blank" rel="noreferrer">{entry}</a> : <code>{entry}</code>}</li>)}</ul> : <p>No evidence references attached.</p>}</div>
+      {detail.reviewRationale && <div className="risk-detail-section"><h3>Reviewer rationale</h3><p>{detail.reviewRationale}</p></div>}
+      <div className="risk-detail-meta"><span>Scoring version <strong>{detail.scoringVersion}</strong></span><span>Created by <strong>{detail.createdByMembership?.user.name || "—"}</strong></span><span>Reviewed by <strong>{detail.reviewedByMembership?.user.name || "—"}</strong></span></div>
+      <div className="risk-modal-actions"><button className="risk-secondary" onClick={() => setDetail(null)}>Close</button>{detail.status === "DRAFT" && <button className="risk-primary" disabled={busy} onClick={() => submitDraft(detail.id)}>Submit for review</button>}</div>
+    </section></div>}
+
+    {review && <div className="risk-modal-backdrop"><section className="risk-modal risk-review-modal" role="dialog" aria-modal="true" aria-labelledby="review-title"><div className="risk-modal-heading"><div><div className="risk-kicker">INDEPENDENT GOVERNANCE REVIEW</div><h2 id="review-title">{review.decision === "APPROVED" ? "Approve assessment" : "Reject assessment"}</h2><p>Your rationale is retained in the assessment and audit trail.</p></div><button className="risk-close" onClick={() => setReview(null)} aria-label="Close">×</button></div><form onSubmit={decide}><label className="risk-field full">Reviewer rationale<textarea required minLength={10} maxLength={3000} rows={6} value={rationale} onChange={e => setRationale(e.target.value)} placeholder={review.decision === "APPROVED" ? "Explain the evidence and controls supporting approval…" : "Describe the gaps, risks, and remediation required…"} /><span className="risk-field-hint">{rationale.length}/3000 characters · minimum 10</span></label><div className="risk-modal-actions"><button type="button" className="risk-secondary" onClick={() => setReview(null)}>Cancel</button><button className="risk-primary" disabled={busy || rationale.trim().length < 10}>{busy ? "Saving…" : "Confirm " + review.decision.toLowerCase()}</button></div></form></section></div>}
+  </main>;
 }
