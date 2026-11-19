@@ -1,0 +1,19 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: sentinelai-webhook
+  group_by:
+    - alertname
+    - service
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: sentinelai-webhook
+    webhook_configs:
+      # Replace with an approved HTTPS endpoint that accepts Alertmanager's
+      # webhook payload format. Keep any credentials in the secret manager.
+      - url: https://alerts.example.internal/alertmanager-webhook
+        send_resolved: true
