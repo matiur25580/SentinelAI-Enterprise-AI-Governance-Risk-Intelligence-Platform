@@ -134,6 +134,11 @@ test("register, login, refresh rotation, and logout work against PostgreSQL", { 
       ),
       "A workspace must see only its own audit history, never another workspace's asset events.",
     );
+    const secondaryIntegrity = await request("/audit-logs/integrity", {
+      token: secondaryLogin.data.accessToken,
+    });
+    assert.equal(secondaryIntegrity.response.status, 200, JSON.stringify(secondaryIntegrity.data));
+    assert.equal(secondaryIntegrity.data.verified, true);
     const secondaryAuditExport = await request("/audit-logs/export.csv", {
       token: secondaryLogin.data.accessToken,
     });
@@ -248,6 +253,25 @@ test("register, login, refresh rotation, and logout work against PostgreSQL", { 
     assert.ok(auditLogs.data.data.some((entry) => entry.action === "asset.delete"));
     assert.ok(auditLogs.data.data.every((entry) => entry.organizationId === profile.data.organization.id));
     assert.ok(auditLogs.data.data.every((entry) => entry.actor?.email === email));
+
+    const primaryIntegrity = await request("/audit-logs/integrity", {
+      token: register.data.accessToken,
+    });
+    assert.equal(primaryIntegrity.response.status, 200, JSON.stringify(primaryIntegrity.data));
+    assert.equal(primaryIntegrity.data.verified, true);
+    assert.ok(primaryIntegrity.data.recordsChecked >= 4);
+
+    const auditEntryId = auditLogs.data.data[0].id;
+    await assert.rejects(
+      database.query('UPDATE "AuditLog" SET "action" = \'tampered.action\' WHERE "id" = $1', [auditEntryId]),
+      /append-only/,
+      "Database trigger must reject audit record updates.",
+    );
+    await assert.rejects(
+      database.query('DELETE FROM "AuditLog" WHERE "id" = $1', [auditEntryId]),
+      /append-only/,
+      "Database trigger must reject audit record deletion.",
+    );
 
     const primaryAuditExport = await request("/audit-logs/export.csv?entityType=AIAsset", {
       token: register.data.accessToken,

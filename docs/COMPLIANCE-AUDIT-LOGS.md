@@ -49,3 +49,22 @@ Authorization: Bearer <access-token>
 ```
 
 The export uses the same filters and organization scope as the JSON endpoint. It is ordered newest-first and includes event identifiers, timestamps, actor identity, action, entity information, and metadata. The endpoint returns an attachment with `Cache-Control: no-store` and a maximum of 10,000 records; requests exceeding that limit must narrow their filters. CSV cells are quoted and spreadsheet formula prefixes are neutralized to reduce CSV injection risk. Exports are generated on demand and are not stored by the API.
+
+## Append-only integrity chain
+
+A database migration adds a per-workspace SHA-256 hash chain. Each inserted event receives a monotonically increasing workspace sequence, the previous event hash, and its own record hash. A transaction-scoped row lock on the workspace chain head serializes concurrent inserts so events cannot silently fork the chain.
+
+PostgreSQL triggers reject direct updates and deletes of audit rows. The audit actor and organization foreign keys use restrictive delete behavior so deleting a user or workspace cannot silently rewrite or cascade-delete compliance history. Existing audit rows are backfilled in deterministic timestamp/ID order during migration.
+
+Authorized compliance roles can verify the active workspace chain:
+
+```http
+GET /api/v1/audit-logs/integrity
+Authorization: Bearer <access-token>
+```
+
+The response reports whether the sequence, previous-hash links, record hashes, and stored chain head match. Verification is scoped to the authenticated workspace; clients cannot select another organization.
+
+### Important security boundary
+
+This provides database-enforced append-only behavior and tamper-evidence against ordinary application/database-role mutations. It is not cryptographic proof against a database superuser or an attacker who can alter triggers, functions, and chain-head data together. For stronger regulatory assurance, periodically anchor signed chain-head hashes in independently controlled immutable/WORM storage, protect signing keys in KMS/HSM, and retain independent backups. No automatic retention deletion or purge job is enabled; retention periods and legal holds must be approved and implemented as an explicit policy.
