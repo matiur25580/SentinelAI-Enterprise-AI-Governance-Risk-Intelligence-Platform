@@ -52,7 +52,7 @@ export function createZipArchive(files: AuditPackageFile[]): Buffer {
     const centralHeader = Buffer.concat([
       u32(0x02014b50), u16(20), u16(20), u16(flags), u16(method), u16(0), u16(0),
       u32(checksum), u32(compressed.length), u32(raw.length), u16(name.length),
-      u16(0), u16(0), u16(0), u32(0), u32(offset), name,
+      u16(0), u16(0), u16(0), u16(0), u32(0), u32(offset), name,
     ]);
     central.push(centralHeader);
     offset += localHeader.length + compressed.length;
