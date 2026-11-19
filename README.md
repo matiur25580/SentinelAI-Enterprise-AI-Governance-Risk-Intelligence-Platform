@@ -53,7 +53,8 @@ pnpm dev
 ```
 
 - Web console: http://localhost:3000
-- API health: http://localhost:4000/api/v1/health
+- API liveness: http://localhost:4000/api/v1/health
+- API readiness (includes PostgreSQL): http://localhost:4000/api/v1/health/ready
 - AI engine (run separately): from `apps/ai-engine`, install `requirements.txt` and start Uvicorn on port 8000.
 
 ## Authentication API
@@ -86,6 +87,7 @@ infrastructure/ Deployment infrastructure (upcoming)
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Security baseline](docs/SECURITY.md)
+- [Production deployment readiness](docs/PRODUCTION_DEPLOYMENT.md)
 - [Development roadmap](docs/ROADMAP.md)
 
 ## Security principles
