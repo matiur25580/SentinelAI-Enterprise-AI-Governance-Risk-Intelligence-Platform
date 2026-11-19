@@ -116,7 +116,7 @@ test("governance report and downloadable PDF/ZIP audit package stay organization
   const archiveResponse = await requestBuffer("/governance/reports/export.zip", { token });
   assert.equal(archiveResponse.response.status, 200);
   assert.match(archiveResponse.response.headers.get("content-type") || "", /application\/zip/);
-  assert.match(archiveResponse.response.headers.get("content-disposition") || "", /sentinelai-governance-audit-package\\.zip/);
+  assert.match(archiveResponse.response.headers.get("content-disposition") || "", /sentinelai-governance-audit-package\.zip/);
   assert.equal(archiveResponse.response.headers.get("cache-control"), "no-store");
   assert.equal(archiveResponse.buffer.subarray(0, 4).toString("hex"), "504b0304", "response is a ZIP archive");
   const packageFiles = unzipLocalEntries(archiveResponse.buffer);
