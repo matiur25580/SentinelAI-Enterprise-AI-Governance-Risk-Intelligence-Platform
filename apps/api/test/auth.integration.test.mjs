@@ -10,12 +10,13 @@ const baseUrl = `http://127.0.0.1:${port}/api/v1`;
 let apiProcess;
 let apiOutput = "";
 
-async function request(path, { method = "GET", body, token } = {}) {
+async function request(path, { method = "GET", body, token, headers = {} } = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
     method,
     headers: {
       ...(body ? { "content-type": "application/json" } : {}),
       ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...headers,
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
@@ -52,6 +53,21 @@ before(async () => {
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   throw new Error(`API did not become healthy within 30 seconds.\n${apiOutput}`);
+});
+
+test("request telemetry returns a fresh correlation ID and excludes query strings", async () => {
+  const marker = `sensitive-query-marker-${Date.now()}`;
+  const { response } = await request(`/health?secret=${marker}`, {
+    headers: { "x-request-id": "untrusted-client-request-id" },
+  });
+
+  assert.equal(response.status, 200);
+  const requestId = response.headers.get("x-request-id");
+  assert.match(requestId ?? "", /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+  assert.notEqual(requestId, "untrusted-client-request-id");
+  assert.ok(!apiOutput.includes(marker), "Query strings must never be written to request logs.");
+  assert.ok(apiOutput.includes('"event":"http.request"'));
+  assert.ok(apiOutput.includes('"route":"/api/v1/health"'));
 });
 
 after(async () => {
