@@ -1,0 +1,38 @@
+# Build from the repository root: docker build -f Dockerfile.api -t sentinelai-api:local .
+FROM node:22-bookworm-slim AS base
+WORKDIR /workspace
+RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
+
+FROM base AS build
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/web/package.json apps/web/package.json
+RUN pnpm install --frozen-lockfile
+COPY . .
+RUN DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build" \
+    pnpm --filter @sentinelai/api db:generate \
+  && pnpm --filter @sentinelai/api build
+
+FROM base AS production-dependencies
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/web/package.json apps/web/package.json
+RUN pnpm install --prod --frozen-lockfile --filter @sentinelai/api
+
+FROM node:22-bookworm-slim AS runtime
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --from=production-dependencies --chown=node:node /workspace/node_modules ./node_modules
+COPY --from=production-dependencies --chown=node:node /workspace/apps/api/node_modules ./apps/api/node_modules
+COPY --from=build --chown=node:node /workspace/apps/api/dist ./apps/api/dist
+COPY --from=build --chown=node:node /workspace/apps/api/package.json ./apps/api/package.json
+WORKDIR /app/apps/api
+USER node
+ENV API_PORT=4000
+EXPOSE 4000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.API_PORT||4000)+'/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+CMD ["node", "dist/main.js"]

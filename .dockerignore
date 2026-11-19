@@ -1,0 +1,15 @@
+.git
+.github
+**/node_modules
+**/.next
+**/dist
+**/coverage
+**/.turbo
+**/.cache
+.env
+.env.*
+!.env.example
+**/*.log
+ops/local-monitoring/secrets
+postgres-data
+redis-data

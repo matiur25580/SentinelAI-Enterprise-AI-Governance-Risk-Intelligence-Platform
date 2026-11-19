@@ -51,6 +51,10 @@ jobs:
         run: pnpm typecheck
       - name: Build workspaces
         run: pnpm build
+      - name: Build API production container image
+        run: docker build --pull -f Dockerfile.api -t sentinelai-api:ci .
+      - name: Build web production container image
+        run: docker build --pull -f Dockerfile.web -t sentinelai-web:ci .
       - name: Run authentication integration tests
         run: pnpm --filter @sentinelai/api test:integration
       - name: Test production deployment smoke checks
