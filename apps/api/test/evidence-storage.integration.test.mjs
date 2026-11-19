@@ -30,6 +30,14 @@ async function request(path, { method = "GET", body, token } = {}) {
 }
 
 before(async () => {
+  // Keep this integration suite independent from rate-limit buckets left by earlier CI suites.
+  const rateLimitDatabase = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await rateLimitDatabase.query('DELETE FROM "ApiRateLimitBucket"');
+  } finally {
+    await rateLimitDatabase.end();
+  }
+
   storageServer = createServer(async (req, res) => {
     const key = new URL(req.url || "/", `http://127.0.0.1:${storagePort}`).pathname;
     if (req.method === "PUT") {
