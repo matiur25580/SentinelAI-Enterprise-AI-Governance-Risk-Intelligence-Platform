@@ -57,7 +57,7 @@ export default function RegisterPage() {
           <label htmlFor="register-email">Work email</label>
           <input id="register-email" type="email" autoComplete="email" required maxLength={254} value={email} onChange={event => setEmail(event.target.value)} />
           <label htmlFor="register-organization">Organization name</label>
-          <input id="register-organization" required minLength={2} maxLength={120} value={organizationName} onChange={event => setOrganizationName(event.target.value)} />
+          <input id="register-organization" required minLength={2} maxLength={100} value={organizationName} onChange={event => setOrganizationName(event.target.value)} />
           <label htmlFor="register-password">Password (at least 12 characters)</label>
           <input id="register-password" type="password" autoComplete="new-password" required minLength={12} maxLength={128} value={password} onChange={event => setPassword(event.target.value)} />
           <label htmlFor="register-confirm">Confirm password</label>
