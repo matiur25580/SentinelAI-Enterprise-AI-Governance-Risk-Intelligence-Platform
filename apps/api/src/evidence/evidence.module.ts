@@ -5,10 +5,12 @@ import { EvidenceController } from "./evidence.controller.js";
 import { EvidenceStorageService } from "./evidence-storage.service.js";
 import { S3CompatibleStorage } from "./s3-compatible-storage.js";
 import { ClamAvScanner } from "./clamav-scanner.js";
+import { EvidenceRetentionService } from "./evidence-retention.service.js";
+import { EvidenceRetentionController } from "./evidence-retention.controller.js";
 
 @Module({
   imports: [AuthModule, PrismaModule],
-  controllers: [EvidenceController],
-  providers: [EvidenceStorageService, S3CompatibleStorage, ClamAvScanner],
+  controllers: [EvidenceController, EvidenceRetentionController],
+  providers: [EvidenceStorageService, EvidenceRetentionService, S3CompatibleStorage, ClamAvScanner],
 })
 export class EvidenceModule {}
