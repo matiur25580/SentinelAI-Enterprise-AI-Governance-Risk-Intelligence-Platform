@@ -27,9 +27,9 @@ export class AccountLifecycleService {
   async issueEmailVerification(userId: string): Promise<void> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { email: true, emailVerifiedAt: true },
+      select: { email: true, emailVerifiedAt: true, isActive: true },
     });
-    if (!user || user.emailVerifiedAt) return;
+    if (!user || !user.isActive || user.emailVerifiedAt) return;
 
     const token = await this.createToken(userId, AccountActionTokenPurpose.EMAIL_VERIFICATION, VERIFICATION_TTL_MS);
     const link = this.email.publicUrl("/verify-email", token);
@@ -43,9 +43,9 @@ export class AccountLifecycleService {
   async requestEmailVerification(email: string) {
     const user = await this.prisma.user.findUnique({
       where: { email: email.trim().toLowerCase() },
-      select: { id: true, emailVerifiedAt: true },
+      select: { id: true, emailVerifiedAt: true, isActive: true },
     });
-    if (user && !user.emailVerifiedAt) {
+    if (user?.isActive && !user.emailVerifiedAt) {
       try {
         await this.issueEmailVerification(user.id);
       } catch {
