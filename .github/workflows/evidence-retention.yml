@@ -1,0 +1,36 @@
+name: Evidence retention cleanup
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evidence-retention-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate cleanup configuration
+        env:
+          API_URL: ${{ vars.SENTINELAI_API_URL }}
+          RETENTION_TOKEN: ${{ secrets.EVIDENCE_RETENTION_CRON_TOKEN }}
+        run: |
+          test -n "$API_URL" || { echo "SENTINELAI_API_URL repository variable is required."; exit 1; }
+          test -n "$RETENTION_TOKEN" || { echo "EVIDENCE_RETENTION_CRON_TOKEN repository secret is required."; exit 1; }
+          case "$API_URL" in https://*) ;; *) echo "SENTINELAI_API_URL must use HTTPS."; exit 1 ;; esac
+      - name: Run evidence retention cleanup
+        env:
+          API_URL: ${{ vars.SENTINELAI_API_URL }}
+          RETENTION_TOKEN: ${{ secrets.EVIDENCE_RETENTION_CRON_TOKEN }}
+        run: |
+          curl --fail-with-body --silent --show-error --max-time 120 \\
+            --request POST \\
+            --header "x-evidence-retention-token: $RETENTION_TOKEN" \\
+            "$API_URL/internal/evidence-retention/run"
