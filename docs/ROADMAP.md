@@ -24,8 +24,10 @@
 
 ## Milestone 5 — Operations
 - [ ] Usage and latency observability
-- [ ] Incidents, notifications, and human review
-- [ ] Executive and auditor reporting
+- [x] Incidents: tenant-scoped intake, severity triage, controlled lifecycle, and audit events
+- [ ] Notifications and human review
+- [x] Auditor audit-trail filtering, integrity verification, and CSV export
+- [ ] Executive risk and incident reporting
 
 ## Milestone 6 — Production readiness
 - [ ] Automated tests and CI/CD
