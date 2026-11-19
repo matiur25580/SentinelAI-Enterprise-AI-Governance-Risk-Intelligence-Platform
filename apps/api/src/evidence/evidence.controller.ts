@@ -5,6 +5,7 @@ import type { AuthenticatedUser } from "../auth/interfaces/authenticated-user.in
 import { CreateEvidenceUploadDto } from "./dto/create-evidence-upload.dto.js";
 import { VerifyEvidenceDto } from "./dto/verify-evidence.dto.js";
 import { PurgeEvidenceDto } from "./dto/purge-evidence.dto.js";
+import { EvidenceLegalHoldDto } from "./dto/evidence-legal-hold.dto.js";
 import { EvidenceStorageService } from "./evidence-storage.service.js";
 
 @UseGuards(JwtAuthGuard)
@@ -39,6 +40,16 @@ export class EvidenceController {
   @Post(":evidenceId/rescan")
   rescan(@CurrentUser() user: AuthenticatedUser, @Param("assessmentId") assessmentId: string, @Param("evidenceId") evidenceId: string) {
     return this.service.rescanQuarantined(user, assessmentId, evidenceId);
+  }
+
+  @Post(":evidenceId/legal-hold")
+  placeLegalHold(@CurrentUser() user: AuthenticatedUser, @Param("assessmentId") assessmentId: string, @Param("evidenceId") evidenceId: string, @Body() dto: EvidenceLegalHoldDto) {
+    return this.service.placeLegalHold(user, assessmentId, evidenceId, dto);
+  }
+
+  @Post(":evidenceId/legal-hold/release")
+  releaseLegalHold(@CurrentUser() user: AuthenticatedUser, @Param("assessmentId") assessmentId: string, @Param("evidenceId") evidenceId: string, @Body() dto: EvidenceLegalHoldDto) {
+    return this.service.releaseLegalHold(user, assessmentId, evidenceId, dto);
   }
 
   @Post(":evidenceId/purge")
