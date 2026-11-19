@@ -85,14 +85,17 @@ before(async () => {
 
   scannerServer = createTcpServer((socket) => {
     let buffer = Buffer.alloc(0);
+    let started = false;
     const chunks = [];
     socket.on("data", (data) => {
       buffer = Buffer.concat([buffer, data]);
-      if (buffer.length < 10) return;
-      let offset = 10; // zINSTREAM\\0
-      while (buffer.length >= offset + 4) {
-        const length = buffer.readUInt32BE(offset);
-        offset += 4;
+      if (!started) {
+        if (buffer.length < 10) return;
+        buffer = buffer.subarray(10); // zINSTREAM\\0
+        started = true;
+      }
+      while (buffer.length >= 4) {
+        const length = buffer.readUInt32BE(0);
         if (length === 0) {
           const payload = Buffer.concat(chunks);
           socket.end(payload.includes(Buffer.from("EICAR-STANDARD-ANTIVIRUS-TEST-FILE"))
@@ -100,11 +103,10 @@ before(async () => {
             : "stream: OK\\0");
           return;
         }
-        if (buffer.length < offset + length) return;
-        chunks.push(buffer.subarray(offset, offset + length));
-        offset += length;
+        if (buffer.length < 4 + length) return;
+        chunks.push(buffer.subarray(4, 4 + length));
+        buffer = buffer.subarray(4 + length);
       }
-      buffer = buffer.subarray(offset);
     });
   });
   await new Promise((resolve) => scannerServer.listen(scannerPort, "127.0.0.1", resolve));
