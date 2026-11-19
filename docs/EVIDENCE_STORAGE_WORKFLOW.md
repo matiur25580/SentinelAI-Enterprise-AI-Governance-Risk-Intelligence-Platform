@@ -36,7 +36,8 @@ For browser uploads, configure bucket CORS to allow only the deployed web origin
 
 `PENDING_UPLOAD → UPLOADED (ClamAV clean) → VERIFIED | REJECTED`  
 `PENDING_UPLOAD → QUARANTINED (malware detected) → UPLOADED (clean rescan) → VERIFIED | REJECTED`  
-`QUARANTINED → PURGED (authorized deletion; audit metadata retained)`
+`QUARANTINED → PURGED (authorized deletion; audit metadata retained)`  
+`VERIFIED | REJECTED | QUARANTINED → PURGED (retention expiry; legal holds excluded)`
 
 1. An OWNER, ADMIN, AI_GOVERNANCE, or AI_ENGINEER requests an upload intent for an assessment in their organization.
 2. The API creates a private metadata row and a five-minute presigned PUT URL with signed content type and checksum headers.
@@ -47,7 +48,7 @@ For browser uploads, configure bucket CORS to allow only the deployed web origin
 7. OWNER, ADMIN, or SECURITY_ANALYST can permanently delete a quarantined object by supplying a 10–1000 character rationale. The API deletes the private object, marks its metadata `PURGED`, and retains the checksum, original file name, actor, and reason in the audit log.
 8. Upload intent, completion, download URL issuance, scan/release/purge actions, and verification decisions are written to the append-only organization audit log.
 
-Evidence creators cannot verify their own files. Quarantined files are unavailable for download and review. Completed decisions cannot be overwritten through this API. Rejected objects are retained in private storage pending a documented retention/deletion policy. Purging is restricted to quarantined objects; audit-relevant metadata is retained with status `PURGED` after the bytes are removed.
+Evidence creators cannot verify their own files. Quarantined files are unavailable for download and review. Completed decisions cannot be overwritten through this API. Rejected objects are retained in private storage pending a documented retention/deletion policy. Manual purging is restricted to quarantined objects; automated retention cleanup applies only to expired terminal evidence and never to legal-held records. Audit-relevant metadata is retained with status `PURGED` after the bytes are removed.
 
 ## API
 
@@ -61,7 +62,7 @@ All routes require a bearer token and are prefixed by `/api/v1`.
 | POST | `/risk-assessments/:assessmentId/evidence/:evidenceId/download` | Issue a 120-second private download URL |
 | POST | `/risk-assessments/:assessmentId/evidence/:evidenceId/decision` | Record independent verification or rejection |
 | POST | `/risk-assessments/:assessmentId/evidence/:evidenceId/rescan` | Re-scan quarantined evidence; release only on a clean scan |
-| POST | `/risk-assessments/:assessmentId/evidence/:evidenceId/purge` | Permanently delete quarantined bytes with an audited rationale |
+| POST | `/risk-assessments/:assessmentId/evidence/:evidenceId/purge` | Permanently delete quarantined bytes with an audited rationale |\n| POST | `/risk-assessments/:assessmentId/evidence/:evidenceId/legal-hold` | Place a legal hold (OWNER, ADMIN, COMPLIANCE_OFFICER) |\n| POST | `/risk-assessments/:assessmentId/evidence/:evidenceId/legal-hold/release` | Release a legal hold with an audited rationale |\n| POST | `/internal/evidence-retention/run` | Run scheduled cleanup; requires `x-evidence-retention-token` |
 
 Upload intent body:
 
@@ -93,5 +94,5 @@ Verification body:
 - For local development, run a ClamAV daemon bound to loopback with `docker run --rm -d --name sentinelai-clamav -p 127.0.0.1:3310:3310 clamav/clamav:stable`, then set `CLAMAV_HOST=127.0.0.1` and `CLAMAV_PORT=3310`. Wait for the signature database initialization and daemon readiness before uploading evidence.
 - Keep ClamAV signatures updated and isolate the scanner on a private network. The integration suite uses a local protocol-compatible test double; it does not replace deployment validation against a real ClamAV service.
 - Rescan is a manual, explicitly authorized action; no scheduler or automatic signature-update callback is configured.
-- Purge is an explicit security operation, not a retention scheduler. Automated age-based retention, legal holds, object version deletion, and backup-expiry coordination are not implemented.
+- `EVIDENCE_RETENTION_DAYS` defaults to 365; set it to `0` to disable expiry of terminal evidence. The API validates values from 0 to 36500 days. Retention begins when evidence becomes `VERIFIED`, `REJECTED`, or `QUARANTINED`; a clean rescan clears the quarantine expiry until a later review decision.\n- The scheduled GitHub Actions workflow runs daily and can be invoked manually. Configure repository variable `SENTINELAI_API_URL` (API origin, without a trailing slash) and secret `EVIDENCE_RETENTION_CRON_TOKEN` (at least 32 random non-whitespace characters); configure the same secret and `EVIDENCE_RETENTION_DAYS` in the API runtime. The internal endpoint uses constant-time token comparison and returns 401 when the token is not configured.\n- Each cleanup run processes at most 100 records. Failed object deletions roll back the metadata transition and are retried on a later run. Missing objects are treated as already deleted. Legal holds block both automated cleanup and manual quarantine purge.\n- Cleanup deletes current object bytes only; provider-side object versions, replicas, backups, legal discovery exports, and storage-provider lifecycle rules require separate retention coordination. Audit metadata is intentionally not deleted.
 - Full document parsing, content disarm/reconstruction, and automated evidence classification are not implemented.
