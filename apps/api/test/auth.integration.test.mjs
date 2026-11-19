@@ -146,6 +146,13 @@ test("register, login, refresh rotation, and logout work against PostgreSQL", { 
     assert.equal(secondaryProfile.data.organization.id, secondOrganizationId);
     assert.equal(secondaryProfile.data.organization.name, "SentinelAI Secondary Workspace");
     assert.notEqual(secondaryProfile.data.organization.id, profile.data.organization.id);
+    const primarySessionPayload = JSON.parse(Buffer.from(register.data.refreshToken.split(".")[1], "base64url").toString("utf8"));
+    const crossWorkspaceSessionRevoke = await request("/auth/sessions/" + primarySessionPayload.familyId, {
+      method: "DELETE",
+      token: secondaryLogin.data.accessToken,
+    });
+    assert.equal(crossWorkspaceSessionRevoke.response.status, 404, "A workspace must not revoke another workspace session.");
+    assert.equal((await request("/auth/me", { token: register.data.accessToken })).response.status, 200);
     // Use an authorized role so the cross-tenant update test reaches the
     // tenant-scoped service and verifies its 404 non-disclosure behavior.
     await database.query(
@@ -363,6 +370,8 @@ test("register, login, refresh rotation, and logout work against PostgreSQL", { 
   const sessions = await request("/auth/sessions", { token: sessionLogin.data.accessToken });
   assert.equal(sessions.response.status, 200, JSON.stringify(sessions.data));
   assert.ok(sessions.data.data.some((session) => session.sessionId === sessionPayload.familyId));
+  const malformedSessionId = await request("/auth/sessions/not-a-session-id", { method: "DELETE", token: sessionLogin.data.accessToken });
+  assert.equal(malformedSessionId.response.status, 400);
   const revokedSession = await request("/auth/sessions/" + sessionPayload.familyId, { method: "DELETE", token: sessionLogin.data.accessToken });
   assert.equal(revokedSession.response.status, 200, JSON.stringify(revokedSession.data));
   assert.ok(revokedSession.data.revokedTokenCount >= 1);
