@@ -12,7 +12,7 @@ type Assessment = {
   createdByMembership?: { user: { name: string } }; reviewedByMembership?: { user: { name: string } } | null;
 };
 type Profile = { user: { name: string }; organization: { name: string }; role: string };
-type EvidenceFile = { id: string; originalFileName: string; contentType: string; sizeBytes: string; checksumSha256: string; status: "PENDING_UPLOAD" | "UPLOADED" | "VERIFIED" | "REJECTED"; createdAt: string; uploadedAt?: string | null; verifiedAt?: string | null; verificationNote?: string | null; createdByMembership?: { user: { name: string } }; verifiedByMembership?: { user: { name: string } } | null };
+type EvidenceFile = { id: string; originalFileName: string; contentType: string; sizeBytes: string; checksumSha256: string; status: "PENDING_UPLOAD" | "UPLOADED" | "QUARANTINED" | "VERIFIED" | "REJECTED"; createdAt: string; uploadedAt?: string | null; verifiedAt?: string | null; verificationNote?: string | null; createdByMembership?: { user: { name: string } }; verifiedByMembership?: { user: { name: string } } | null };
 type FormState = { assetId: string; title: string; scope: string; intendedUse: string; dataSensitivity: number; autonomyLevel: number; impact: number; likelihood: number; exposure: number; mitigationCoverage: number; evidenceText: string };
 const API = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1").replace(/\/$/, "");
 const initialForm: FormState = { assetId: "", title: "", scope: "", intendedUse: "", dataSensitivity: 3, autonomyLevel: 2, impact: 3, likelihood: 3, exposure: 3, mitigationCoverage: 0, evidenceText: "" };
