@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { after, before, test } from "node:test";
 import pg from "pg";
+import { inflateRawSync } from "node:zlib";
 
 const { Pool } = pg;
 
@@ -16,7 +17,7 @@ async function resetAuthRateLimits() {
   finally { await database.end(); }
 }
 
-async function request(path, { method = "GET", body, token } = {}) {
+async function requestBuffer(path, { token } = {}) {\n  const response = await fetch(`${baseUrl}${path}`, { headers: { authorization: `Bearer ${token}` } });\n  return { response, buffer: Buffer.from(await response.arrayBuffer()) };\n}\n\nfunction unzipLocalEntries(buffer) {\n  const entries = new Map();\n  let offset = 0;\n  while (offset + 30 <= buffer.length && buffer.readUInt32LE(offset) === 0x04034b50) {\n    const method = buffer.readUInt16LE(offset + 8);\n    const compressedSize = buffer.readUInt32LE(offset + 18);\n    const nameLength = buffer.readUInt16LE(offset + 26);\n    const extraLength = buffer.readUInt16LE(offset + 28);\n    const nameStart = offset + 30;\n    const dataStart = nameStart + nameLength + extraLength;\n    const name = buffer.subarray(nameStart, nameStart + nameLength).toString("utf8");\n    const compressed = buffer.subarray(dataStart, dataStart + compressedSize);\n    assert.equal(method, 8, "ZIP entries use DEFLATE");\n    entries.set(name, inflateRawSync(compressed));\n    offset = dataStart + compressedSize;\n  }\n  return entries;\n}\n\nasync function request(path, { method = "GET", body, token } = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
     method,
     headers: { ...(body ? { "content-type": "application/json" } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}) },
@@ -87,6 +88,26 @@ test("governance report aggregates stay organization-scoped and export as CSV", 
   assert.match(csv.raw, /AI incidents/);
   assert.match(csv.raw, /Incident severity: CRITICAL/);
 
+
+  const archiveResponse = await requestBuffer("/governance/reports/export.zip", { token });
+  assert.equal(archiveResponse.response.status, 200);
+  assert.match(archiveResponse.response.headers.get("content-type") || "", /application\\/zip/);
+  assert.match(archiveResponse.response.headers.get("content-disposition") || "", /sentinelai-governance-audit-package\\.zip/);
+  assert.equal(archiveResponse.response.headers.get("cache-control"), "no-store");
+  assert.equal(archiveResponse.buffer.subarray(0, 4).toString("hex"), "504b0304", "response is a ZIP archive");
+  const packageFiles = unzipLocalEntries(archiveResponse.buffer);
+  for (const name of ["README.txt", "report.pdf", "manifest.json", "governance-summary.json", "assets.csv", "risk-assessments.csv", "evidence-inventory.csv", "incidents.csv", "audit-trail.csv"]) {
+    assert.ok(packageFiles.has(name), `package includes ${name}`);
+  }
+  assert.equal(packageFiles.get("report.pdf").subarray(0, 8).toString("ascii"), "%PDF-1.4");
+  const packageData = JSON.parse(packageFiles.get("governance-summary.json").toString("utf8"));
+  assert.equal(packageData.inventory.incidents.length, 1);
+  assert.equal(packageData.inventory.incidents[0].title, "Governance report test incident");
+  assert.ok(packageData.inventory.auditEvents.some(event => event.action === "governance.audit_package_export"));
+  assert.equal(packageData.auditIntegrity.verified, true);
+  const packageText = packageFiles.get("governance-summary.json").toString("utf8");
+  assert.doesNotMatch(packageText, /storageKey|signedUrl|secretAccessKey|passwordHash/);
+
   const outsider = await request("/auth/register", { method: "POST", body: {
     name: "Other Tenant", email: `report-outsider-${suffix}@example.test`, password, organizationName: "Other Report Workspace",
   }});
@@ -94,7 +115,14 @@ test("governance report aggregates stay organization-scoped and export as CSV", 
   const isolated = await request("/governance/reports/summary", { token: outsider.data.accessToken });
   assert.equal(isolated.response.status, 200);
   assert.equal(isolated.data.incidents.total, 0);
-  assert.equal(isolated.data.audit.total, 1);
+  assert.equal(isolated.data.audit.total, 1);\n
+  const outsiderPackage = await requestBuffer("/governance/reports/export.zip", { token: outsider.data.accessToken });
+  assert.equal(outsiderPackage.response.status, 200);
+  const outsiderFiles = unzipLocalEntries(outsiderPackage.buffer);
+  const outsiderData = JSON.parse(outsiderFiles.get("governance-summary.json").toString("utf8"));
+  assert.equal(outsiderData.inventory.incidents.length, 0, "ZIP export never includes another tenant's incidents");
+  assert.ok(!outsiderFiles.get("incidents.csv").toString("utf8").includes("Governance report test incident"));
+
 });
 
 after(async () => {
