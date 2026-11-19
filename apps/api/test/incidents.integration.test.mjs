@@ -1,11 +1,20 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { after, before, test } from "node:test";
+import pg from "pg";
+
+const { Pool } = pg;
 
 const port = 4319;
 const baseUrl = `http://127.0.0.1:${port}/api/v1`;
 let apiProcess;
 let apiOutput = "";
+
+async function resetAuthRateLimits() {
+  const database = new Pool({ connectionString: process.env.DATABASE_URL });
+  try { await database.query('DELETE FROM "ApiRateLimitBucket"'); }
+  finally { await database.end(); }
+}
 
 async function request(path, { method = "GET", body, token } = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
@@ -20,6 +29,8 @@ async function request(path, { method = "GET", body, token } = {}) {
 }
 
 before(async () => {
+  // Integration suites share PostgreSQL; isolate their authentication rate-limit buckets.
+  await resetAuthRateLimits();
   apiProcess = spawn(process.execPath, ["dist/main.js"], {
     cwd: process.cwd(),
     env: { ...process.env, API_PORT: String(port) },
