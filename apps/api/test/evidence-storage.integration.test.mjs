@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
+import { createServer as createTcpServer } from "node:net";
 import { spawn } from "node:child_process";
 import { after, before, test as nodeTest } from "node:test";
 import pg from "pg";
@@ -8,11 +9,13 @@ import pg from "pg";
 const { Pool } = pg;
 const apiPort = 4320;
 const storagePort = 4321;
+const scannerPort = 4322;
 const baseUrl = `http://127.0.0.1:${apiPort}/api/v1`;
 const storageObjects = new Map();
 let apiProcess;
 let apiOutput = "";
 let storageServer;
+let scannerServer;
 
 async function resetAuthRateLimits() {
   const database = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -80,6 +83,32 @@ before(async () => {
   });
   await new Promise((resolve) => storageServer.listen(storagePort, "127.0.0.1", resolve));
 
+  scannerServer = createTcpServer((socket) => {
+    let buffer = Buffer.alloc(0);
+    const chunks = [];
+    socket.on("data", (data) => {
+      buffer = Buffer.concat([buffer, data]);
+      if (buffer.length < 10) return;
+      let offset = 10; // zINSTREAM\\0
+      while (buffer.length >= offset + 4) {
+        const length = buffer.readUInt32BE(offset);
+        offset += 4;
+        if (length === 0) {
+          const payload = Buffer.concat(chunks);
+          socket.end(payload.includes(Buffer.from("EICAR-STANDARD-ANTIVIRUS-TEST-FILE"))
+            ? "stream: Eicar-Test-Signature FOUND\\0"
+            : "stream: OK\\0");
+          return;
+        }
+        if (buffer.length < offset + length) return;
+        chunks.push(buffer.subarray(offset, offset + length));
+        offset += length;
+      }
+      buffer = buffer.subarray(offset);
+    });
+  });
+  await new Promise((resolve) => scannerServer.listen(scannerPort, "127.0.0.1", resolve));
+
   apiProcess = spawn(process.execPath, ["dist/main.js"], {
     cwd: process.cwd(),
     env: {
@@ -90,6 +119,8 @@ before(async () => {
       EVIDENCE_S3_REGION: "us-east-1",
       EVIDENCE_S3_ACCESS_KEY_ID: "ci-evidence-access-key",
       EVIDENCE_S3_SECRET_ACCESS_KEY: "ci-evidence-secret-key-for-local-tests",
+      CLAMAV_HOST: "127.0.0.1",
+      CLAMAV_PORT: String(scannerPort),
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -264,6 +295,32 @@ nodeTest("private evidence upload, checksum validation, tenant isolation, and in
   });
   assert.equal(repeatDecision.response.status, 409);
 
+  const infectedBytes = Buffer.from("%PDF-1.7\\nEICAR-STANDARD-ANTIVIRUS-TEST-FILE\\n%%EOF\\n");
+  const infectedChecksum = createHash("sha256").update(infectedBytes).digest("hex");
+  const infectedIntent = await request(evidencePath + "/upload-intents", {
+    method: "POST", token: ownerToken,
+    body: { fileName: "suspicious.pdf", contentType: "application/pdf", sizeBytes: infectedBytes.length, checksumSha256: infectedChecksum },
+  });
+  assert.equal(infectedIntent.response.status, 201, JSON.stringify(infectedIntent.data));
+  const infectedPut = await fetch(infectedIntent.data.upload.url, {
+    method: "PUT", headers: infectedIntent.data.upload.headers, body: infectedBytes,
+  });
+  assert.equal(infectedPut.status, 200);
+  const quarantined = await request(evidencePath + "/" + infectedIntent.data.evidence.id + "/complete", {
+    method: "POST", token: ownerToken,
+  });
+  assert.equal(quarantined.response.status, 201, JSON.stringify(quarantined.data));
+  assert.equal(quarantined.data.status, "QUARANTINED");
+  const quarantinedDownload = await request(evidencePath + "/" + infectedIntent.data.evidence.id + "/download", {
+    method: "POST", token: ownerToken,
+  });
+  assert.equal(quarantinedDownload.response.status, 404);
+  const quarantinedDecision = await request(evidencePath + "/" + infectedIntent.data.evidence.id + "/decision", {
+    method: "POST", token: reviewerLogin.data.accessToken,
+    body: { decision: "VERIFIED", note: "Attempt to verify a quarantined file." },
+  });
+  assert.equal(quarantinedDecision.response.status, 409);
+
   const audit = await request("/audit-logs?action=evidence.verify", { token: ownerToken });
   assert.equal(audit.response.status, 200);
   assert.equal(audit.data.pagination.total, 1);
@@ -279,4 +336,5 @@ after(async () => {
     });
   }
   if (storageServer) await new Promise((resolve) => storageServer.close(resolve));
+  if (scannerServer) await new Promise((resolve) => scannerServer.close(resolve));
 });
