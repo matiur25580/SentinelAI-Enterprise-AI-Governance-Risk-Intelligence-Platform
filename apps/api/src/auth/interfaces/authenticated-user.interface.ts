@@ -5,5 +5,6 @@ export interface AuthenticatedUser {
   email: string;
   organizationId: string;
   membershipId: string;
+  sessionId: string;
   role: MembershipRole;
 }
