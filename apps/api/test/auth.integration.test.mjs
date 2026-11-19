@@ -33,7 +33,7 @@ async function request(path, { method = "GET", body, token, headers = {} } = {})
 before(async () => {
   apiProcess = spawn(process.execPath, ["dist/main.js"], {
     cwd: process.cwd(),
-    env: { ...process.env, API_PORT: String(port) },
+    env: { ...process.env, API_PORT: String(port), METRICS_BEARER_TOKEN: "ci-metrics-token-for-integration-tests-only-2026" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   apiProcess.stdout.on("data", (chunk) => { apiOutput += chunk.toString(); });
@@ -53,6 +53,20 @@ before(async () => {
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   throw new Error(`API did not become healthy within 30 seconds.\n${apiOutput}`);
+});
+
+test("Prometheus metrics endpoint requires its bearer token and exports request metrics", async () => {
+  const denied = await request("/metrics");
+  assert.equal(denied.response.status, 404);
+
+  const allowed = await request("/metrics", {
+    headers: { authorization: "Bearer ci-metrics-token-for-integration-tests-only-2026" },
+  });
+  assert.equal(allowed.response.status, 200);
+  assert.match(allowed.response.headers.get("content-type") ?? "", /text\/plain/);
+  assert.ok(allowed.data.raw?.includes("# TYPE sentinelai_http_requests_total counter"));
+  assert.ok(allowed.data.raw?.includes("# TYPE sentinelai_http_request_duration_seconds histogram"));
+  assert.ok(allowed.data.raw?.includes('route="/api/v1/health"'));
 });
 
 test("request telemetry returns a fresh correlation ID and excludes query strings", async () => {
