@@ -5,14 +5,12 @@ import { FormEvent, useEffect, useState } from "react";
 const API = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1").replace(/\/$/, "");
 
 export default function VerifyEmailPage() {
-  const [token, setToken] = useState("");
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState("Checking your verification link…");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     const value = new URLSearchParams(window.location.search).get("token") || "";
-    setToken(value);
     if (!value) {
       setStatus("This verification link is missing its token. Request a fresh email below.");
       return;
