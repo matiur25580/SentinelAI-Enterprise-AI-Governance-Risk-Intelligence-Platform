@@ -9,7 +9,36 @@ This guide describes the minimum operational setup for the current SentinelAI fo
 - **AI engine:** FastAPI starter. It currently exposes health metadata only; it is not an authenticated inference service.
 - Redis is present in local Compose for future background work but is not currently required by the API.
 
-There is no checked-in production deployment manifest or container image definition. Choose a hosting platform and provision the web, API, and database as separate services; do not treat the development Compose file as a production deployment.
+Provider-neutral production Dockerfiles are now checked in for the web and API services. There is still no provider-specific deployment manifest or production Compose stack: choose a hosting platform and provision the web, API, and database as separate services. Do not treat the development Compose file as a production deployment.
+
+## Build and run the production container images
+
+Build both images from the repository root (the Docker build context must be the repository root so pnpm can resolve the workspace):
+
+```bash
+docker build --pull -f Dockerfile.api -t sentinelai-api:<git-sha> .
+docker build --pull -f Dockerfile.web -t sentinelai-web:<git-sha> .
+```
+
+The API image uses a multi-stage build, installs only API production dependencies in its runtime stage, includes the generated Prisma client, runs as the unprivileged `node` user, and exposes port 4000 by default. Its built-in health check calls the liveness endpoint. The web image uses Next.js standalone output, runs as the unprivileged `node` user, and exposes port 3000. Both images use Node.js 22 and pnpm 9.15.4 for reproducible workspace builds. CI builds both images on every pull request; it does not publish or deploy them.
+
+Supply API configuration through the hosting platform's secret manager (or a protected env file outside the repository). At minimum, configure `NODE_ENV=production`, `API_PORT`, `DATABASE_URL`, independent `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET`, and `WEB_ORIGIN`. Set `TRUST_PROXY_HOPS` only when the exact trusted proxy chain is known. Do not bake secrets into image build arguments or image layers.
+
+Example local smoke start commands (replace the env-file path with a protected file containing the required API settings):
+
+```bash
+docker run -d --name sentinelai-api \
+  --env-file /secure/path/sentinelai-api.env \
+  -p 127.0.0.1:4000:4000 sentinelai-api:<git-sha>
+docker run -d --name sentinelai-web \
+  -p 127.0.0.1:3000:3000 sentinelai-web:<git-sha>
+```
+
+These commands assume the API's PostgreSQL host in `DATABASE_URL` is reachable from the container. In a real deployment, attach both services to the provider's private network, route public HTTPS traffic through its managed ingress/reverse proxy, and restrict direct API/database access. The web container currently has no provider-specific API URL wiring; configure the frontend/API origin in the hosting architecture before enabling real user flows.
+
+Database migrations are deliberately not run by API container startup. Run `pnpm db:deploy` exactly once as a controlled release step from the reviewed source revision with the production `DATABASE_URL`, before routing traffic. Do not run migrations from every API replica. The runtime API image omits the Prisma CLI and migration source tree.
+
+Use immutable commit-SHA image tags for releases, scan images in the chosen registry, and retain the previous known-good image for rollback. These Dockerfiles are build artifacts only: no registry, hosting service, database, DNS, TLS certificate, or production secret has been configured by this repository.
 
 ## Required production environment
 Configure these values in the hosting provider secret/environment manager. Never commit real values.
