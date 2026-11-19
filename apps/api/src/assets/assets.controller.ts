@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseStringPipe, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
 import type { AuthenticatedUser } from "../auth/interfaces/authenticated-user.interface.js";
@@ -22,7 +22,7 @@ export class AssetsController {
   }
 
   @Get(":id")
-  get(@CurrentUser() user: AuthenticatedUser, @Param("id", new ParseStringPipe()) id: string) {
+  get(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
     return this.assetsService.get(user, id);
   }
 
