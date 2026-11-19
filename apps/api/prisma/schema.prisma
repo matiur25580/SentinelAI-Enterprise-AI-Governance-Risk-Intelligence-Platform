@@ -44,7 +44,14 @@ enum RiskAssessmentStatus {
   REJECTED
 }
 
-enum EvidenceFileStatus {\n  PENDING_UPLOAD\n  UPLOADED\n  VERIFIED\n  REJECTED\n}\n\nenum RiskLevel {
+enum EvidenceFileStatus {
+  PENDING_UPLOAD
+  UPLOADED
+  VERIFIED
+  REJECTED
+}
+
+enum RiskLevel {
   LOW
   MEDIUM
   HIGH
@@ -63,7 +70,8 @@ model Organization {
   refreshTokens RefreshToken[]
   auditLogs   AuditLog[]
   auditChainHead AuditChainHead?
-  riskAssessments RiskAssessment[]\n  evidenceFiles EvidenceFile[]
+  riskAssessments RiskAssessment[]
+  evidenceFiles EvidenceFile[]
 
   @@index([isActive])
 }
@@ -97,7 +105,9 @@ model Membership {
   refreshTokens  RefreshToken[]
   assets         AIAsset[]      @relation("AssetOwner")
   riskAssessmentsCreated RiskAssessment[] @relation("RiskAssessmentCreator")
-  riskAssessmentsReviewed RiskAssessment[] @relation("RiskAssessmentReviewer")\n  evidenceFilesCreated EvidenceFile[] @relation("EvidenceFileCreator")\n  evidenceFilesVerified EvidenceFile[] @relation("EvidenceFileVerifier")
+  riskAssessmentsReviewed RiskAssessment[] @relation("RiskAssessmentReviewer")
+  evidenceFilesCreated EvidenceFile[] @relation("EvidenceFileCreator")
+  evidenceFilesVerified EvidenceFile[] @relation("EvidenceFileVerifier")
 
   @@unique([userId, organizationId])
   @@index([organizationId, role])
@@ -206,7 +216,8 @@ model RiskAssessment {
   organization          Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   asset                 AIAsset              @relation(fields: [assetId], references: [id], onDelete: Restrict)
   createdByMembership  Membership           @relation("RiskAssessmentCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
-  reviewedByMembership Membership?          @relation("RiskAssessmentReviewer", fields: [reviewedByMembershipId], references: [id], onDelete: Restrict)\n  evidenceFiles          EvidenceFile[]
+  reviewedByMembership Membership?          @relation("RiskAssessmentReviewer", fields: [reviewedByMembershipId], references: [id], onDelete: Restrict)
+  evidenceFiles          EvidenceFile[]
 
   @@index([organizationId, status, createdAt])
   @@index([organizationId, residualLevel])
