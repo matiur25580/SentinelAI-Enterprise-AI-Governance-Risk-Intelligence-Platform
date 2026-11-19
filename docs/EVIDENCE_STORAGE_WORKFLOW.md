@@ -35,16 +35,19 @@ For browser uploads, configure bucket CORS to allow only the deployed web origin
 ## Lifecycle
 
 `PENDING_UPLOAD → UPLOADED (ClamAV clean) → VERIFIED | REJECTED`  
-`PENDING_UPLOAD → QUARANTINED (malware detected)`
+`PENDING_UPLOAD → QUARANTINED (malware detected) → UPLOADED (clean rescan) → VERIFIED | REJECTED`  
+`QUARANTINED → PURGED (authorized deletion; audit metadata retained)`
 
 1. An OWNER, ADMIN, AI_GOVERNANCE, or AI_ENGINEER requests an upload intent for an assessment in their organization.
 2. The API creates a private metadata row and a five-minute presigned PUT URL with signed content type and checksum headers.
 3. The browser uploads bytes directly to object storage, then calls the completion endpoint.
 4. The API performs a signed HEAD request and compares object size, media type, and S3-validated SHA-256 checksum with the intent. It then retrieves the object (maximum 20 MiB), validates the file signature/encoding, and scans it with ClamAV. Only a clean scan transitions to `UPLOADED`; a detection transitions to `QUARANTINED`. Scanner errors fail closed.
 5. A different authorized reviewer (OWNER, ADMIN, AI_GOVERNANCE, SECURITY_ANALYST, or COMPLIANCE_OFFICER) records a rationale and makes the final `VERIFIED` or `REJECTED` decision on clean `UPLOADED` evidence only.
-6. Upload intent, completion, download URL issuance, and verification decisions are written to the append-only organization audit log.
+6. Security reviewers can request a fresh ClamAV scan of quarantined evidence. A clean result releases the file to `UPLOADED`; a detection keeps it quarantined. No manual override can bypass scanning.
+7. OWNER, ADMIN, or SECURITY_ANALYST can permanently delete a quarantined object by supplying a 10–1000 character rationale. The API deletes the private object, marks its metadata `PURGED`, and retains the checksum, original file name, actor, and reason in the audit log.
+8. Upload intent, completion, download URL issuance, scan/release/purge actions, and verification decisions are written to the append-only organization audit log.
 
-Evidence creators cannot verify their own files. Quarantined files are unavailable for download and review. Completed decisions cannot be overwritten through this API. Rejected objects are retained in private storage pending a documented retention/deletion policy; the API does not silently delete audit-relevant evidence.
+Evidence creators cannot verify their own files. Quarantined files are unavailable for download and review. Completed decisions cannot be overwritten through this API. Rejected objects are retained in private storage pending a documented retention/deletion policy. Purging is restricted to quarantined objects; audit-relevant metadata is retained with status `PURGED` after the bytes are removed.
 
 ## API
 
@@ -57,6 +60,8 @@ All routes require a bearer token and are prefixed by `/api/v1`.
 | GET | `/risk-assessments/:assessmentId/evidence` | List evidence metadata |
 | POST | `/risk-assessments/:assessmentId/evidence/:evidenceId/download` | Issue a 120-second private download URL |
 | POST | `/risk-assessments/:assessmentId/evidence/:evidenceId/decision` | Record independent verification or rejection |
+| POST | `/risk-assessments/:assessmentId/evidence/:evidenceId/rescan` | Re-scan quarantined evidence; release only on a clean scan |
+| POST | `/risk-assessments/:assessmentId/evidence/:evidenceId/purge` | Permanently delete quarantined bytes with an audited rationale |
 
 Upload intent body:
 
@@ -87,4 +92,6 @@ Verification body:
 - Configure `CLAMAV_HOST` and optional `CLAMAV_PORT` (default `3310`) to reach a maintained ClamAV daemon. In production, the API refuses to start with evidence storage enabled if `CLAMAV_HOST` is missing.
 - For local development, run a ClamAV daemon bound to loopback with `docker run --rm -d --name sentinelai-clamav -p 127.0.0.1:3310:3310 clamav/clamav:stable`, then set `CLAMAV_HOST=127.0.0.1` and `CLAMAV_PORT=3310`. Wait for the signature database initialization and daemon readiness before uploading evidence.
 - Keep ClamAV signatures updated and isolate the scanner on a private network. The integration suite uses a local protocol-compatible test double; it does not replace deployment validation against a real ClamAV service.
-- Full document parsing, content disarm/reconstruction, automated evidence classification, retention automation, and legal hold workflows are not implemented.
+- Rescan is a manual, explicitly authorized action; no scheduler or automatic signature-update callback is configured.
+- Purge is an explicit security operation, not a retention scheduler. Automated age-based retention, legal holds, object version deletion, and backup-expiry coordination are not implemented.
+- Full document parsing, content disarm/reconstruction, and automated evidence classification are not implemented.
