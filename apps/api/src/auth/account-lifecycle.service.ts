@@ -3,7 +3,6 @@ import {
   Logger,
   UnauthorizedException,
 } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import * as argon2 from "argon2";
 import { createHash, randomBytes } from "node:crypto";
 import { AccountActionTokenPurpose } from "../generated/prisma/client.js";
@@ -23,7 +22,6 @@ export class AccountLifecycleService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly email: AccountEmailService,
-    private readonly config: ConfigService,
   ) {}
 
   async issueEmailVerification(userId: string): Promise<void> {
