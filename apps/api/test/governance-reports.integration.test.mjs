@@ -132,6 +132,15 @@ test("governance report and downloadable PDF/ZIP audit package stay organization
   const packageText = packageFiles.get("governance-summary.json").toString("utf8");
   assert.doesNotMatch(packageText, /storageKey|signedUrl|secretAccessKey|passwordHash/);
 
+  const filteredArchive = await requestBuffer("/governance/reports/export.zip?from=2035-01-01T00:00:00.000Z&to=2035-01-02T00:00:00.000Z", { token });
+  assert.equal(filteredArchive.response.status, 200);
+  const filteredFiles = unzipLocalEntries(filteredArchive.buffer);
+  const filteredData = JSON.parse(filteredFiles.get("governance-summary.json").toString("utf8"));
+  assert.equal(filteredData.inventory.incidents.length, 0, "date filters constrain detailed ZIP inventories");
+  assert.equal(filteredData.inventory.auditEvents.length, 0, "date filters constrain selected-period audit rows");
+  assert.equal(filteredData.auditIntegrity.verified, true, "integrity check still verifies the full organization chain");
+
+
   const outsider = await request("/auth/register", { method: "POST", body: {
     name: "Other Tenant", email: `report-outsider-${suffix}@example.test`, password, organizationName: "Other Report Workspace",
   }});
