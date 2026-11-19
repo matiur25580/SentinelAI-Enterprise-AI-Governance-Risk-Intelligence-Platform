@@ -13,7 +13,8 @@
     "db:generate": "prisma generate --config prisma.config.ts",
     "db:migrate": "prisma migrate dev --config prisma.config.ts",
     "db:deploy": "prisma migrate deploy --config prisma.config.ts",
-    "db:studio": "prisma studio --config prisma.config.ts"
+    "db:studio": "prisma studio --config prisma.config.ts",
+    "bootstrap:admin": "node scripts/bootstrap-admin.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",

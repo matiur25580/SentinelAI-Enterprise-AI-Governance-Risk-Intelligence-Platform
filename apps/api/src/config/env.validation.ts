@@ -16,6 +16,19 @@ export function validateEnvironment(config: Record<string, unknown>) {
   const requireVerifiedEmail = authVerificationSetting === undefined
     ? nodeEnv === "production"
     : authVerificationSetting === true || authVerificationSetting === "true";
+  const selfServiceSetting = config.ALLOW_SELF_SERVICE_REGISTRATION;
+  if (
+    selfServiceSetting !== undefined &&
+    selfServiceSetting !== true &&
+    selfServiceSetting !== false &&
+    selfServiceSetting !== "true" &&
+    selfServiceSetting !== "false"
+  ) {
+    errors.push("ALLOW_SELF_SERVICE_REGISTRATION must be true or false.");
+  }
+  const allowSelfServiceRegistration = selfServiceSetting === undefined
+    ? nodeEnv !== "production"
+    : selfServiceSetting === true || selfServiceSetting === "true";
   if (nodeEnv === "production" && !requireVerifiedEmail) {
     errors.push("AUTH_REQUIRE_VERIFIED_EMAIL cannot be disabled in production.");
   }
@@ -99,5 +112,5 @@ export function validateEnvironment(config: Record<string, unknown>) {
     } catch { errors.push("WEB_ORIGIN must contain comma-separated valid origins."); break; }
   }
   if (errors.length > 0) throw new Error(`Invalid environment configuration: ${errors.join(" ")}`);
-  return { ...config, NODE_ENV: nodeEnv, API_PORT: port, AUTH_REQUIRE_VERIFIED_EMAIL: requireVerifiedEmail };
+  return { ...config, NODE_ENV: nodeEnv, API_PORT: port, AUTH_REQUIRE_VERIFIED_EMAIL: requireVerifiedEmail, ALLOW_SELF_SERVICE_REGISTRATION: allowSelfServiceRegistration };
 }

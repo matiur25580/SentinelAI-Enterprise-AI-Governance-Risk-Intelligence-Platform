@@ -47,6 +47,31 @@ jobs:
           for migration in apps/api/prisma/migrations/*/migration.sql; do
             psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
           done
+      - name: Exercise first-owner bootstrap against PostgreSQL
+        env:
+          NODE_ENV: production
+          BOOTSTRAP_ADMIN_EMAIL: bootstrap-ci@example.test
+          BOOTSTRAP_ADMIN_NAME: CI Bootstrap Owner
+          BOOTSTRAP_ADMIN_PASSWORD: CI-only-bootstrap-password-2026!
+          BOOTSTRAP_ORGANIZATION_NAME: SentinelAI Bootstrap CI
+        run: pnpm --filter @sentinelai/api bootstrap:admin
+      - name: Verify first-owner bootstrap cannot be repeated
+        env:
+          NODE_ENV: production
+          BOOTSTRAP_ADMIN_EMAIL: bootstrap-ci@example.test
+          BOOTSTRAP_ADMIN_NAME: CI Bootstrap Owner
+          BOOTSTRAP_ADMIN_PASSWORD: CI-only-bootstrap-password-2026!
+          BOOTSTRAP_ORGANIZATION_NAME: SentinelAI Bootstrap CI
+        run: |
+          set +e
+          output=$(pnpm --filter @sentinelai/api bootstrap:admin 2>&1)
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ] || ! echo "$output" | grep -q "already contains user accounts"; then
+            echo "$output"
+            echo "The second bootstrap attempt was not safely rejected."
+            exit 1
+          fi
       - name: Type check
         run: pnpm typecheck
       - name: Build workspaces
@@ -71,6 +96,8 @@ jobs:
         run: node --test scripts/production-smoke-check.test.mjs
       - name: Validate Prometheus and Alertmanager configuration
         run: bash scripts/validate-monitoring-config.sh
+      - name: Validate first-owner bootstrap script
+        run: node --check apps/api/scripts/bootstrap-admin.mjs
       - name: Check required foundation files
         run: |
           test -f README.md

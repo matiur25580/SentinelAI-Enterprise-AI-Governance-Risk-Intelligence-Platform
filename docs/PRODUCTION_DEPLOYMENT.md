@@ -127,3 +127,16 @@ GitHub Actions scheduled runs are best-effort and are not a substitute for a ded
 ## Account email security
 
 Email verification is enabled by default when `NODE_ENV=production`. The API then requires `RESEND_API_KEY`, `EMAIL_FROM`, and an HTTPS `APP_PUBLIC_URL` origin. Configure a verified sender/domain with Resend before enabling production registration. Verification links expire after 24 hours; password-reset links expire after 30 minutes. Both use random one-time tokens stored only as SHA-256 hashes. A successful password reset revokes every refresh-token family for the account, immediately invalidating existing access sessions. The email request endpoints return generic responses to reduce account-enumeration risk. In non-production environments, email verification can be enabled explicitly with `AUTH_REQUIRE_VERIFIED_EMAIL=true`.
+
+
+## First administrator bootstrap
+
+Self-service registration defaults to enabled in development and disabled in production. Production startup keeps it disabled unless an operator explicitly sets `ALLOW_SELF_SERVICE_REGISTRATION=true`. For a new production database, run the one-time owner bootstrap from a controlled release environment **before exposing the API**:
+
+1. Apply the Prisma migrations to the empty production database.
+2. Set `NODE_ENV=production`, `DATABASE_URL`, `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_NAME`, `BOOTSTRAP_ADMIN_PASSWORD` (at least 16 characters), and `BOOTSTRAP_ORGANIZATION_NAME` in the one-off job environment.
+3. Run `pnpm --filter @sentinelai/api bootstrap:admin` from the repository root.
+4. Confirm the command reports the first verified workspace owner, then remove the `BOOTSTRAP_ADMIN_*` variables from the job and runtime environment.
+5. Start the API with the normal production secrets and email-delivery configuration.
+
+The command takes a PostgreSQL advisory lock, refuses to run outside production, and aborts if **any** user already exists. It creates the first organization, a verified `OWNER` membership, an Argon2id password hash, and an audit event in one transaction. It never prints the supplied password. It is not an account-recovery or administrator-promotion command and must not be rerun against an initialized database.
