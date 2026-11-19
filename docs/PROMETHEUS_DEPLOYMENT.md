@@ -74,7 +74,9 @@ uses pinned Prometheus and Alertmanager container versions to validate the
 scrape configuration, alert rules, and Alertmanager configuration with
 `promtool` and `amtool`. The alert rules are mounted at the absolute path
 referenced by the Prometheus example, so CI validates the same file layout
-documented for deployment. Docker is required to run this check locally.
+documented for deployment. It creates a temporary dummy token file solely for
+syntax validation; no production credential is used. Docker is required to run
+this check locally.
 
 ## 6. Production verification checklist
 
