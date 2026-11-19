@@ -35,6 +35,11 @@ export class AuditLogsController {
     return this.auditLogsService.exportCsv(user, query);
   }
 
+  @Get("integrity")
+  verifyIntegrity(@CurrentUser() user: AuthenticatedUser) {
+    return this.auditLogsService.verifyIntegrity(user);
+  }
+
   @Get()
   list(@CurrentUser() user: AuthenticatedUser, @Query() query: AuditLogQueryDto) {
     return this.auditLogsService.list(user, query);
