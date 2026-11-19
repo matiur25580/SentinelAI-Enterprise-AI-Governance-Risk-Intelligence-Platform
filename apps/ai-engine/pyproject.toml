@@ -1,0 +1,14 @@
+[project]
+name = "sentinelai-engine"
+version = "0.1.0"
+description = "AI evaluation and risk intelligence service for SentinelAI"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi==0.115.6",
+  "uvicorn[standard]==0.34.0",
+  "pydantic==2.10.4",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
