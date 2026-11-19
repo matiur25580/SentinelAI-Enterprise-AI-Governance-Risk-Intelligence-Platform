@@ -61,6 +61,14 @@ The checked-in `ops/prometheus/alerts.yml` contains three starter rules: scrape 
 
 The 5xx and latency alerts include a minimum traffic guard to reduce noise on quiet services. Tune thresholds and `for` durations against measured traffic and approved SLOs. Configure Alertmanager separately with authenticated, tested receivers and escalation policies; the rule file alone does not send notifications.
 
+### Importing the starter Grafana dashboard
+
+The repository includes `ops/grafana/sentinelai-api-overview.json`, a starter dashboard with panels for total request rate, 5xx percentage, p95 latency, and request rate by route.
+
+In Grafana, open **Dashboards → New → Import**, upload the JSON file, select the Prometheus data source that scrapes the SentinelAI API, and import. Confirm that the selected data source is the same one containing the `sentinelai_http_requests_total` and `sentinelai_http_request_duration_seconds` metrics. The dashboard defaults to the last 6 hours and a 30-second refresh interval.
+
+The dashboard is intentionally read-only and contains no credentials. Do not expose the metrics bearer token in Grafana variables, browser settings, or dashboard JSON. Configure Prometheus to scrape the protected metrics endpoint using a supported secret mechanism, keep Grafana access restricted to operators, and verify queries against your actual metric labels before relying on the panels. No Grafana or Prometheus service is provisioned by this repository.
+
 ## Logging and privacy
 
 - Emit structured logs with timestamp, severity, service, environment, route template, status, duration, and a generated correlation/request ID. The API baseline emits JSON request-completion events and returns the server-generated ID in `X-Request-Id` (also exposed to browser clients through CORS). Use that ID to correlate a client report with the corresponding API log.
