@@ -27,12 +27,13 @@ async function resetAuthRateLimits() {
   }
 }
 
-async function request(path, { method = "GET", body, token } = {}) {
+async function request(path, { method = "GET", body, token, retentionToken } = {}) {
   const response = await fetch(baseUrl + path, {
     method,
     headers: {
       ...(body ? { "content-type": "application/json" } : {}),
       ...(token ? { authorization: "Bearer " + token } : {}),
+      ...(retentionToken ? { "x-evidence-retention-token": retentionToken } : {}),
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
@@ -125,6 +126,8 @@ before(async () => {
       EVIDENCE_S3_SECRET_ACCESS_KEY: "ci-evidence-secret-key-for-local-tests",
       CLAMAV_HOST: "127.0.0.1",
       CLAMAV_PORT: String(scannerPort),
+      EVIDENCE_RETENTION_DAYS: "365",
+      EVIDENCE_RETENTION_CRON_TOKEN: "ci-retention-token-with-at-least-32-characters",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -382,6 +385,51 @@ nodeTest("private evidence upload, checksum validation, tenant isolation, and in
   assert.equal(audit.response.status, 200);
   assert.equal(audit.data.pagination.total, 2);
   assert.deepEqual(new Set(audit.data.data.map(entry => entry.entityId)), new Set([intent.data.evidence.id, infectedIntent.data.evidence.id]));
+
+  const hold = await request(evidencePath + "/" + intent.data.evidence.id + "/legal-hold", {
+    method: "POST", token: ownerToken, body: { reason: "Preserve this verified evidence for the active regulatory inquiry." },
+  });
+  assert.equal(hold.response.status, 201, JSON.stringify(hold.data));
+  const expiryDatabase = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await expiryDatabase.query('UPDATE "EvidenceFile" SET "retentionExpiresAt" = NOW() - INTERVAL \'1 day\' WHERE id = ANY($1::text[])', [[intent.data.evidence.id, infectedIntent.data.evidence.id]]);
+  } finally { await expiryDatabase.end(); }
+
+  const unauthorizedCleanup = await request("/internal/evidence-retention/run", { method: "POST" });
+  assert.equal(unauthorizedCleanup.response.status, 401);
+  const firstCleanup = await request("/internal/evidence-retention/run", { method: "POST", retentionToken: "ci-retention-token-with-at-least-32-characters" });
+  assert.equal(firstCleanup.response.status, 201, JSON.stringify(firstCleanup.data));
+  assert.equal(firstCleanup.data.purged, 1);
+  const heldAndExpired = await request(evidencePath, { token: ownerToken });
+  assert.equal(heldAndExpired.data.find(file => file.id === intent.data.evidence.id).status, "VERIFIED");
+  assert.equal(heldAndExpired.data.find(file => file.id === infectedIntent.data.evidence.id).status, "PURGED");
+  assert.equal(storageObjects.size, 1);
+
+  const release = await request(evidencePath + "/" + intent.data.evidence.id + "/legal-hold/release", {
+    method: "POST", token: ownerToken, body: { reason: "Regulatory inquiry concluded; release retention hold." },
+  });
+  assert.equal(release.response.status, 201, JSON.stringify(release.data));
+  const finalCleanup = await request("/internal/evidence-retention/run", { method: "POST", retentionToken: "ci-retention-token-with-at-least-32-characters" });
+  assert.equal(finalCleanup.response.status, 201, JSON.stringify(finalCleanup.data));
+  assert.equal(finalCleanup.data.purged, 1);
+  assert.equal(storageObjects.size, 0);
+  const finalEvidence = await request(evidencePath, { token: ownerToken });
+  assert.equal(finalEvidence.data.find(file => file.id === intent.data.evidence.id).status, "PURGED");
+
+  const abandonedIntent = await request(evidencePath + "/upload-intents", {
+    method: "POST", token: ownerToken,
+    body: { fileName: "abandoned.pdf", contentType: "application/pdf", sizeBytes: fileBytes.length, checksumSha256: checksum },
+  });
+  assert.equal(abandonedIntent.response.status, 201, JSON.stringify(abandonedIntent.data));
+  const abandonedDatabase = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await abandonedDatabase.query('UPDATE "EvidenceFile" SET "uploadExpiresAt" = NOW() - INTERVAL \'25 hours\' WHERE id = $1', [abandonedIntent.data.evidence.id]);
+  } finally { await abandonedDatabase.end(); }
+  const abandonedCleanup = await request("/internal/evidence-retention/run", { method: "POST", retentionToken: "ci-retention-token-with-at-least-32-characters" });
+  assert.equal(abandonedCleanup.response.status, 201, JSON.stringify(abandonedCleanup.data));
+  assert.equal(abandonedCleanup.data.purged, 1);
+  const abandonedList = await request(evidencePath, { token: ownerToken });
+  assert.equal(abandonedList.data.find(file => file.id === abandonedIntent.data.evidence.id).status, "PURGED");
 });
 
 after(async () => {

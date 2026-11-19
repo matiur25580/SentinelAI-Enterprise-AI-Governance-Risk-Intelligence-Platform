@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { ConfigService } from "@nestjs/config";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { EvidenceFileStatus, MembershipRole } from "../generated/prisma/client.js";
 import type { AuthenticatedUser } from "../auth/interfaces/authenticated-user.interface.js";
@@ -7,6 +8,7 @@ import { S3CompatibleStorage } from "./s3-compatible-storage.js";
 import type { CreateEvidenceUploadDto } from "./dto/create-evidence-upload.dto.js";
 import type { VerifyEvidenceDto } from "./dto/verify-evidence.dto.js";
 import type { PurgeEvidenceDto } from "./dto/purge-evidence.dto.js";
+import type { EvidenceLegalHoldDto } from "./dto/evidence-legal-hold.dto.js";
 import { ClamAvScanner } from "./clamav-scanner.js";
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
@@ -33,7 +35,14 @@ export class EvidenceStorageService {
     private readonly prisma: PrismaService,
     private readonly storage: S3CompatibleStorage,
     private readonly scanner: ClamAvScanner,
+    private readonly config: ConfigService,
   ) {}
+
+  private retentionExpiry() {
+    const days = Number(this.config.get<string>("EVIDENCE_RETENTION_DAYS") ?? "365");
+    if (!Number.isInteger(days) || days < 0 || days > 36500) throw new Error("EVIDENCE_RETENTION_DAYS must be an integer between 0 and 36500.");
+    return days === 0 ? null : new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+  }
 
   private assertRole(auth: AuthenticatedUser, roles: MembershipRole[]) {
     if (!roles.includes(auth.role)) throw new ForbiddenException("Your workspace role does not allow this evidence action.");
@@ -133,7 +142,7 @@ export class EvidenceStorageService {
     return this.prisma.$transaction(async (tx) => {
       const changed = await tx.evidenceFile.updateMany({
         where: { id: evidenceId, organizationId: auth.organizationId, status: EvidenceFileStatus.PENDING_UPLOAD },
-        data: { status: nextStatus, uploadedAt: new Date() },
+        data: { status: nextStatus, uploadedAt: new Date(), retentionExpiresAt: this.retentionExpiry() },
       });
       if (changed.count !== 1) throw new ConflictException("Evidence state changed; reload and try again.");
       const result = await tx.evidenceFile.findUniqueOrThrow({ where: { id: evidenceId } });
@@ -169,6 +178,7 @@ export class EvidenceStorageService {
       select: {
         id: true, originalFileName: true, contentType: true, sizeBytes: true, checksumSha256: true,
         status: true, createdAt: true, uploadedAt: true, verifiedAt: true, verificationNote: true,
+        retentionExpiresAt: true, legalHoldAt: true, legalHoldReason: true,
         createdByMembership: { select: { user: { select: { name: true } } } },
         verifiedByMembership: { select: { user: { select: { name: true } } } },
       },
@@ -222,6 +232,7 @@ export class EvidenceStorageService {
           verifiedByMembershipId: auth.membershipId,
           verifiedAt: new Date(),
           verificationNote: dto.note.trim(),
+          retentionExpiresAt: this.retentionExpiry(),
         },
       });
       if (changed.count !== 1) throw new ConflictException("Evidence state changed; reload and try again.");
@@ -261,7 +272,7 @@ export class EvidenceStorageService {
     return this.prisma.$transaction(async (tx) => {
       const changed = await tx.evidenceFile.updateMany({
         where: { id: evidenceId, organizationId: auth.organizationId, status: EvidenceFileStatus.QUARANTINED },
-        data: { status: nextStatus },
+        data: { status: nextStatus, ...(scan.clean ? { retentionExpiresAt: this.retentionExpiry() } : {}) },
       });
       if (changed.count !== 1) throw new ConflictException("Evidence state changed; reload and try again.");
       await tx.auditLog.create({
@@ -284,22 +295,71 @@ export class EvidenceStorageService {
     });
   }
 
+  async placeLegalHold(auth: AuthenticatedUser, assessmentId: string, evidenceId: string, dto: EvidenceLegalHoldDto) {
+    this.assertRole(auth, [MembershipRole.OWNER, MembershipRole.ADMIN, MembershipRole.COMPLIANCE_OFFICER]);
+    const evidence = await this.prisma.evidenceFile.findFirst({
+      where: { id: evidenceId, riskAssessmentId: assessmentId, organizationId: auth.organizationId },
+      select: { id: true, status: true },
+    });
+    if (!evidence) throw new NotFoundException("Evidence file was not found.");
+    if (evidence.status === EvidenceFileStatus.PURGED || evidence.status === EvidenceFileStatus.PENDING_UPLOAD) {
+      throw new ConflictException("A legal hold can only be placed on uploaded evidence that has not been purged.");
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const changed = await tx.evidenceFile.updateMany({
+        where: { id: evidenceId, organizationId: auth.organizationId, status: evidence.status },
+        data: { legalHoldAt: new Date(), legalHoldReason: dto.reason.trim() },
+      });
+      if (changed.count !== 1) throw new ConflictException("Evidence state changed; reload and try again.");
+      await tx.auditLog.create({ data: {
+        organizationId: auth.organizationId, actorId: auth.sub, action: "evidence.legal_hold_placed",
+        entityType: "EvidenceFile", entityId: evidenceId,
+        metadata: { riskAssessmentId: assessmentId, reason: dto.reason.trim() },
+      } });
+      return { id: evidenceId, legalHold: true };
+    });
+  }
+
+  async releaseLegalHold(auth: AuthenticatedUser, assessmentId: string, evidenceId: string, dto: EvidenceLegalHoldDto) {
+    this.assertRole(auth, [MembershipRole.OWNER, MembershipRole.ADMIN, MembershipRole.COMPLIANCE_OFFICER]);
+    const evidence = await this.prisma.evidenceFile.findFirst({
+      where: { id: evidenceId, riskAssessmentId: assessmentId, organizationId: auth.organizationId },
+      select: { id: true, legalHoldAt: true },
+    });
+    if (!evidence) throw new NotFoundException("Evidence file was not found.");
+    if (!evidence.legalHoldAt) throw new ConflictException("Evidence does not have an active legal hold.");
+    return this.prisma.$transaction(async (tx) => {
+      const changed = await tx.evidenceFile.updateMany({
+        where: { id: evidenceId, organizationId: auth.organizationId, legalHoldAt: { not: null }, status: { not: EvidenceFileStatus.PURGED } },
+        data: { legalHoldAt: null, legalHoldReason: null },
+      });
+      if (changed.count !== 1) throw new ConflictException("Evidence state changed; reload and try again.");
+      await tx.auditLog.create({ data: {
+        organizationId: auth.organizationId, actorId: auth.sub, action: "evidence.legal_hold_released",
+        entityType: "EvidenceFile", entityId: evidenceId,
+        metadata: { riskAssessmentId: assessmentId, reason: dto.reason.trim() },
+      } });
+      return { id: evidenceId, legalHold: false };
+    });
+  }
+
   async purgeQuarantined(auth: AuthenticatedUser, assessmentId: string, evidenceId: string, dto: PurgeEvidenceDto) {
     this.assertRole(auth, [MembershipRole.OWNER, MembershipRole.ADMIN, MembershipRole.SECURITY_ANALYST]);
     const evidence = await this.prisma.evidenceFile.findFirst({
       where: { id: evidenceId, riskAssessmentId: assessmentId, organizationId: auth.organizationId },
-      select: { id: true, storageKey: true, status: true, checksumSha256: true, originalFileName: true },
+      select: { id: true, storageKey: true, status: true, checksumSha256: true, originalFileName: true, legalHoldAt: true },
     });
     if (!evidence) throw new NotFoundException("Evidence file was not found.");
     if (evidence.status !== EvidenceFileStatus.QUARANTINED) {
       throw new ConflictException("Only quarantined evidence can be purged.");
     }
+    if (evidence.legalHoldAt) throw new ConflictException("Evidence under legal hold cannot be purged.");
 
     return this.prisma.$transaction(async (tx) => {
       // Claim the quarantined row before touching object storage. The conditional update
       // serializes concurrent rescans/purges; a failed DELETE rolls the DB transition back.
       const changed = await tx.evidenceFile.updateMany({
-        where: { id: evidenceId, organizationId: auth.organizationId, status: EvidenceFileStatus.QUARANTINED },
+        where: { id: evidenceId, organizationId: auth.organizationId, status: EvidenceFileStatus.QUARANTINED, legalHoldAt: null },
         data: { status: EvidenceFileStatus.PURGED },
       });
       if (changed.count !== 1) throw new ConflictException("Evidence state changed; reload and try again.");
