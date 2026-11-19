@@ -45,6 +45,12 @@ export function validateEnvironment(config: Record<string, unknown>) {
     errors.push("EVIDENCE_S3_SESSION_TOKEN requires the complete evidence storage configuration.");
   }
 
+  const clamavHost = config.CLAMAV_HOST;
+  const clamavPort = Number(config.CLAMAV_PORT ?? 3310);
+  if (clamavHost !== undefined && (typeof clamavHost !== "string" || clamavHost.trim().length === 0)) errors.push("CLAMAV_HOST must be a non-empty hostname when configured.");
+  if (config.CLAMAV_PORT !== undefined && (!Number.isInteger(clamavPort) || clamavPort < 1 || clamavPort > 65535)) errors.push("CLAMAV_PORT must be an integer between 1 and 65535.");
+  if (nodeEnv === "production" && configuredEvidenceKeys.length === evidenceStorageKeys.length && !clamavHost) errors.push("CLAMAV_HOST is required when private evidence storage is enabled in production.");
+
   const origins = typeof config.WEB_ORIGIN === "string" ? config.WEB_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean) : [];
   if (nodeEnv === "production" && origins.length === 0) errors.push("WEB_ORIGIN must be explicitly configured in production.");
   for (const origin of origins) {
