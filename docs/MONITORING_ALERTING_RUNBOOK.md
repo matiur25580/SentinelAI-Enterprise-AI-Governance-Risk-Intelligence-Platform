@@ -6,6 +6,7 @@ This is a provider-neutral operations plan for SentinelAI. It documents what an 
 
 - API liveness: `GET /api/v1/health`. Use this to detect whether the API process responds; it is not a dependency check.
 - API readiness: `GET /api/v1/health/ready`. Use this for traffic readiness and database-connectivity monitoring. It returns HTTP 503 when PostgreSQL is unavailable.
+- Request telemetry: each API response includes a server-generated `X-Request-Id`; the API emits one JSON `http.request` event on response completion with the request ID, method, route template, status code, and duration.
 - CI: GitHub Actions runs the repository Quality and Security workflows on their configured events.
 - PostgreSQL and Redis are defined for local development in Docker Compose. Production database/Redis monitoring must be configured in the selected provider.
 - The repository does not currently define a production metrics exporter, tracing backend, centralized log pipeline, pager integration, or alert rules. Do not assume these are enabled.
@@ -55,8 +56,8 @@ Avoid paging on a single transient sample. Use consecutive failures, minimum tra
 
 ## Logging and privacy
 
-- Emit structured logs with timestamp, severity, service, environment, route template, status, duration, and a generated correlation/request ID.
-- Redact authorization headers, cookies, passwords, access/refresh tokens, secrets, database URLs, and request bodies by default.
+- Emit structured logs with timestamp, severity, service, environment, route template, status, duration, and a generated correlation/request ID. The API baseline emits JSON request-completion events and returns the server-generated ID in `X-Request-Id` (also exposed to browser clients through CORS). Use that ID to correlate a client report with the corresponding API log.
+- Redact authorization headers, cookies, passwords, access/refresh tokens, secrets, database URLs, and request bodies by default. The built-in request event intentionally excludes headers, bodies, query strings, raw URLs, IP addresses, and user identifiers; preserve this allowlist when extending telemetry.
 - Do not log raw IP addresses or unfiltered user-provided prompts unless a documented, approved need and retention policy exist.
 - Keep audit records separate from diagnostic logs. Never mutate or use operational log retention as a substitute for the append-only application audit trail.
 - Restrict log access, encrypt transport and storage, set retention limits, and audit operator access.
