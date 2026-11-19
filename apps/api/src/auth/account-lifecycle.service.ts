@@ -33,11 +33,15 @@ export class AccountLifecycleService {
 
     const token = await this.createToken(userId, AccountActionTokenPurpose.EMAIL_VERIFICATION, VERIFICATION_TTL_MS);
     const link = this.email.publicUrl("/verify-email", token);
-    await this.email.send(
-      user.email,
-      "Verify your SentinelAI account",
-      `Verify your email address by opening this one-time link (valid for 24 hours):\n\n${link}\n\nIf you did not create this account, you can ignore this message.`,
-    );
+    try {
+      await this.email.send(
+        user.email,
+        "Verify your SentinelAI account",
+        `Verify your email address by opening this one-time link (valid for 24 hours):\n\n${link}\n\nIf you did not create this account, you can ignore this message.`,
+      );
+    } catch {
+      this.logger.warn("Email verification delivery failed.");
+    }
   }
 
   async requestEmailVerification(email: string) {
