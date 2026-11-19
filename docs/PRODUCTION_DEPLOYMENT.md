@@ -38,6 +38,14 @@ These commands assume the API's PostgreSQL host in `DATABASE_URL` is reachable f
 
 Database migrations are deliberately not run by API container startup. Run `pnpm db:deploy` exactly once as a controlled release step from the reviewed source revision with the production `DATABASE_URL`, before routing traffic. Do not run migrations from every API replica. The runtime API image omits the Prisma CLI and migration source tree.
 
+CI scans both locally built production images with Trivy 0.58.1 and fails on fixable HIGH or CRITICAL vulnerability findings. The scan also generates CycloneDX SBOM files for the API and web images and uploads them as the `sentinelai-container-sboms` workflow artifact for 30 days. Run the same check locally after building both `sentinelai-api:ci` and `sentinelai-web:ci`:
+
+```bash
+bash scripts/scan-container-images.sh
+```
+
+The scan uses the current Trivy vulnerability database; results can change as that database is updated. `--ignore-unfixed` avoids blocking on findings without an available fix, not on fixable high-severity issues. Review SBOMs and vulnerability results for each release; this CI check is not a substitute for rescanning images in the registry or monitoring newly disclosed vulnerabilities.
+
 Use immutable commit-SHA image tags for releases, scan images in the chosen registry, and retain the previous known-good image for rollback. These Dockerfiles are build artifacts only: no registry, hosting service, database, DNS, TLS certificate, or production secret has been configured by this repository.
 
 ## Required production environment
