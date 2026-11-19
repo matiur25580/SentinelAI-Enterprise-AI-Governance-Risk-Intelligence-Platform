@@ -1,0 +1,1 @@
+ALTER TYPE "EvidenceFileStatus" ADD VALUE IF NOT EXISTS 'PURGED';
