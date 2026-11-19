@@ -91,7 +91,7 @@ before(async () => {
       buffer = Buffer.concat([buffer, data]);
       if (!started) {
         if (buffer.length < 10) return;
-        buffer = buffer.subarray(10); // zINSTREAM\\0
+        buffer = buffer.subarray(10); // zINSTREAM\0
         started = true;
       }
       while (buffer.length >= 4) {
@@ -99,8 +99,8 @@ before(async () => {
         if (length === 0) {
           const payload = Buffer.concat(chunks);
           socket.end(payload.includes(Buffer.from("EICAR-STANDARD-ANTIVIRUS-TEST-FILE"))
-            ? "stream: Eicar-Test-Signature FOUND\\0"
-            : "stream: OK\\0");
+            ? "stream: Eicar-Test-Signature FOUND\0"
+            : "stream: OK\0");
           return;
         }
         if (buffer.length < 4 + length) return;
@@ -297,7 +297,7 @@ nodeTest("private evidence upload, checksum validation, tenant isolation, and in
   });
   assert.equal(repeatDecision.response.status, 409);
 
-  const infectedBytes = Buffer.from("%PDF-1.7\\nEICAR-STANDARD-ANTIVIRUS-TEST-FILE\\n%%EOF\\n");
+  const infectedBytes = Buffer.from("%PDF-1.7\nEICAR-STANDARD-ANTIVIRUS-TEST-FILE\n%%EOF\n");
   const infectedChecksum = createHash("sha256").update(infectedBytes).digest("hex");
   const infectedIntent = await request(evidencePath + "/upload-intents", {
     method: "POST", token: ownerToken,
