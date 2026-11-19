@@ -107,7 +107,7 @@ infrastructure/ Deployment infrastructure (upcoming)
 - [x] Registration, login, refresh-token rotation, logout, and current-user endpoint
 - [ ] Automated auth and tenant-isolation tests
 - [ ] AI asset registry APIs and UI integration
-- [ ] Risk assessments, evaluation pipelines, and security testing
+- [x] Evidence-backed AI risk assessment API and independent approval workflow\n- [ ] Evaluation pipelines and AI security testing
 - [ ] Governance approvals, incident management, and audit reporting
 - [ ] Production hardening and deployment
 
