@@ -41,7 +41,7 @@ export class AccountEmailService {
       throw new ServiceUnavailableException("Public application URL is not configured.");
     }
     const url = new URL(path, origin);
-    url.searchParams.set("token", token);
+    url.hash = new URLSearchParams({ token }).toString();
     return url.toString();
   }
 }
