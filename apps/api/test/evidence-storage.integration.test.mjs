@@ -14,6 +14,15 @@ let apiProcess;
 let apiOutput = "";
 let storageServer;
 
+async function resetAuthRateLimits() {
+  const database = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await database.query('DELETE FROM "ApiRateLimitBucket"');
+  } finally {
+    await database.end();
+  }
+}
+
 async function request(path, { method = "GET", body, token } = {}) {
   const response = await fetch(baseUrl + path, {
     method,
@@ -105,6 +114,7 @@ nodeTest("private evidence upload, checksum validation, tenant isolation, and in
   const reviewerEmail = `evidence-reviewer-${suffix}@example.test`;
   const outsiderEmail = `evidence-outsider-${suffix}@example.test`;
 
+  await resetAuthRateLimits();
   const ownerRegister = await request("/auth/register", {
     method: "POST",
     body: { name: "Evidence Owner", email: ownerEmail, password, organizationName: "Evidence Governance Workspace" },
@@ -194,6 +204,7 @@ nodeTest("private evidence upload, checksum validation, tenant isolation, and in
   assert.equal(downloaded.status, 200);
   assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()), fileBytes);
 
+  await resetAuthRateLimits();
   const outsider = await request("/auth/register", {
     method: "POST",
     body: { name: "Evidence Outsider", email: outsiderEmail, password, organizationName: "Unrelated Workspace" },
@@ -212,6 +223,7 @@ nodeTest("private evidence upload, checksum validation, tenant isolation, and in
   });
   assert.equal(selfVerify.response.status, 403);
 
+  await resetAuthRateLimits();
   const reviewer = await request("/auth/register", {
     method: "POST",
     body: { name: "Evidence Reviewer", email: reviewerEmail, password, organizationName: "Reviewer Personal Workspace" },
