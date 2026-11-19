@@ -213,3 +213,31 @@ model RiskAssessment {
   @@index([assetId, createdAt])
   @@index([createdByMembershipId])
 }
+
+model EvidenceFile {
+  id                    String            @id @default(cuid())
+  organizationId        String
+  riskAssessmentId      String
+  createdByMembershipId String
+  verifiedByMembershipId String?
+  storageKey            String            @unique
+  originalFileName      String
+  contentType           String
+  sizeBytes             BigInt
+  checksumSha256        String
+  status                EvidenceFileStatus @default(PENDING_UPLOAD)
+  uploadExpiresAt       DateTime
+  uploadedAt            DateTime?
+  verifiedAt            DateTime?
+  verificationNote      String?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  organization          Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  riskAssessment        RiskAssessment    @relation(fields: [riskAssessmentId], references: [id], onDelete: Restrict)
+  createdByMembership   Membership        @relation("EvidenceFileCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  verifiedByMembership  Membership?       @relation("EvidenceFileVerifier", fields: [verifiedByMembershipId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, riskAssessmentId, createdAt])
+  @@index([organizationId, status])
+  @@index([uploadExpiresAt, status])
+}
