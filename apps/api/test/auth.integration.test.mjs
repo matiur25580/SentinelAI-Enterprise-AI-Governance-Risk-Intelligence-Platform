@@ -116,6 +116,23 @@ test("register, login, refresh rotation, and logout work against PostgreSQL", { 
     assert.equal(secondaryProfile.data.organization.id, secondOrganizationId);
     assert.equal(secondaryProfile.data.organization.name, "SentinelAI Secondary Workspace");
     assert.notEqual(secondaryProfile.data.organization.id, profile.data.organization.id);
+    // Use an authorized role so the cross-tenant update test reaches the
+    // tenant-scoped service and verifies its 404 non-disclosure behavior.
+    await database.query(
+      'UPDATE "Membership" SET "role" = \'OWNER\', "updatedAt" = NOW() WHERE "id" = $1',
+      [secondMembershipId],
+    );
+
+    const primaryMembership = await database.query(
+      'SELECT "id" FROM "Membership" WHERE "userId" = (SELECT "id" FROM "User" WHERE "email" = $1) AND "organizationId" = $2',
+      [email, profile.data.organization.id],
+    );
+    assert.equal(primaryMembership.rowCount, 1);
+    const primaryMembershipId = primaryMembership.rows[0].id;
+    const setPrimaryRole = async (role) => database.query(
+      'UPDATE "Membership" SET "role" = $1, "updatedAt" = NOW() WHERE "id" = $2',
+      [role, primaryMembershipId],
+    );
 
     const createdAsset = await request("/assets", {
       method: "POST",
@@ -151,6 +168,24 @@ test("register, login, refresh rotation, and logout work against PostgreSQL", { 
     });
     assert.equal(crossWorkspaceUpdate.response.status, 404, "Cross-workspace asset updates must be denied.");
 
+    // Workspace role changes take effect immediately for existing access tokens.
+    await setPrimaryRole("MEMBER");
+    const memberAssetList = await request("/assets", { token: register.data.accessToken });
+    assert.equal(memberAssetList.response.status, 200, "Members may read workspace assets.");
+    const memberCreateDenied = await request("/assets", {
+      method: "POST",
+      token: register.data.accessToken,
+      body: { name: "Unauthorized Asset", assetType: "LLM_APPLICATION" },
+    });
+    assert.equal(memberCreateDenied.response.status, 403, "MEMBER cannot create assets.");
+    const memberUpdateDenied = await request(`/assets/${createdAsset.data.id}`, {
+      method: "PATCH",
+      token: register.data.accessToken,
+      body: { name: "Unauthorized overwrite" },
+    });
+    assert.equal(memberUpdateDenied.response.status, 403, "MEMBER cannot update assets.");
+
+    await setPrimaryRole("AI_ENGINEER");
     const updatedAsset = await request(`/assets/${createdAsset.data.id}`, {
       method: "PATCH",
       token: register.data.accessToken,
@@ -160,6 +195,13 @@ test("register, login, refresh rotation, and logout work against PostgreSQL", { 
     assert.equal(updatedAsset.data.name, "Customer Support LLM v2");
     assert.equal(updatedAsset.data.status, "IN_REVIEW");
 
+    const engineerDeleteDenied = await request(`/assets/${createdAsset.data.id}`, {
+      method: "DELETE",
+      token: register.data.accessToken,
+    });
+    assert.equal(engineerDeleteDenied.response.status, 403, "AI_ENGINEER cannot delete assets.");
+
+    await setPrimaryRole("ADMIN");
     const deletedAsset = await request(`/assets/${createdAsset.data.id}`, {
       method: "DELETE",
       token: register.data.accessToken,
@@ -173,6 +215,8 @@ test("register, login, refresh rotation, and logout work against PostgreSQL", { 
     await database.query('UPDATE "Membership" SET "isActive" = false, "updatedAt" = NOW() WHERE "id" = $1', [secondMembershipId]);
     const inactiveMembershipProfile = await request("/auth/me", { token: secondaryLogin.data.accessToken });
     assert.equal(inactiveMembershipProfile.response.status, 401, "A token tied to an inactive workspace membership must be rejected.");
+    const inactiveMembershipAssets = await request("/assets", { token: secondaryLogin.data.accessToken });
+    assert.equal(inactiveMembershipAssets.response.status, 401, "Inactive memberships must not access protected asset routes.");
 
     const inactiveMembershipLogin = await request("/auth/login", {
       method: "POST",
