@@ -1,0 +1,294 @@
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { JwtService } from "@nestjs/jwt";
+import * as argon2 from "argon2";
+import { randomBytes, randomUUID } from "node:crypto";
+import { MembershipRole } from "../generated/prisma/client.js";
+import { PrismaService } from "../prisma/prisma.service.js";
+import type { LoginDto } from "./dto/login.dto.js";
+import type { RefreshDto } from "./dto/refresh.dto.js";
+import type { RegisterDto } from "./dto/register.dto.js";
+import type { AuthenticatedUser } from "./interfaces/authenticated-user.interface.js";
+
+interface RefreshPayload {
+  sub: string;
+  jti: string;
+  organizationId: string;
+  membershipId: string;
+}
+
+@Injectable()
+export class AuthService {
+  private readonly accessSecret: string;
+  private readonly refreshSecret: string;
+  private readonly refreshLifetimeMs = 30 * 24 * 60 * 60 * 1000;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwtService: JwtService,
+    config: ConfigService,
+  ) {
+    this.accessSecret = config.getOrThrow<string>("JWT_ACCESS_SECRET");
+    this.refreshSecret = config.getOrThrow<string>("JWT_REFRESH_SECRET");
+
+    if (this.accessSecret.length < 32 || this.refreshSecret.length < 32) {
+      throw new Error("JWT secrets must each contain at least 32 characters.");
+    }
+    if (this.accessSecret === this.refreshSecret) {
+      throw new Error("Access and refresh JWT secrets must be different.");
+    }
+  }
+
+  async register(dto: RegisterDto) {
+    const email = dto.email.trim().toLowerCase();
+    const existing = await this.prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      throw new ConflictException("An account with this email already exists.");
+    }
+
+    const passwordHash = await argon2.hash(dto.password, {
+      type: argon2.argon2id,
+      memoryCost: 19456,
+      timeCost: 2,
+      parallelism: 1,
+    });
+    const baseSlug = dto.organizationName
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 70) || "workspace";
+    const slug = `${baseSlug}-${randomBytes(3).toString("hex")}`;
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const organization = await tx.organization.create({
+        data: { name: dto.organizationName.trim(), slug },
+      });
+      const user = await tx.user.create({
+        data: {
+          email,
+          name: dto.name.trim(),
+          passwordHash,
+        },
+      });
+      const membership = await tx.membership.create({
+        data: {
+          userId: user.id,
+          organizationId: organization.id,
+          role: MembershipRole.OWNER,
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          organizationId: organization.id,
+          actorId: user.id,
+          action: "auth.register",
+          entityType: "User",
+          entityId: user.id,
+          metadata: { email },
+        },
+      });
+      return { user, organization, membership };
+    });
+
+    return this.issueTokens(result.user, result.organization, result.membership);
+  }
+
+  async login(dto: LoginDto) {
+    const email = dto.email.trim().toLowerCase();
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      include: {
+        memberships: {
+          where: { isActive: true, organization: { isActive: true } },
+          include: { organization: true },
+        },
+      },
+    });
+
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException("Invalid email or password.");
+    }
+
+    const passwordMatches = await argon2.verify(user.passwordHash, dto.password).catch(() => false);
+    if (!passwordMatches) {
+      throw new UnauthorizedException("Invalid email or password.");
+    }
+
+    const memberships = dto.organizationSlug
+      ? user.memberships.filter((item) => item.organization.slug === dto.organizationSlug)
+      : user.memberships;
+
+    if (memberships.length === 0) {
+      throw new UnauthorizedException("No active membership found for this workspace.");
+    }
+    if (memberships.length > 1) {
+      throw new BadRequestException("Provide organizationSlug to select a workspace.");
+    }
+
+    const membership = memberships[0];
+    await this.prisma.auditLog.create({
+      data: {
+        organizationId: membership.organizationId,
+        actorId: user.id,
+        action: "auth.login",
+        entityType: "User",
+        entityId: user.id,
+      },
+    });
+
+    return this.issueTokens(user, membership.organization, membership);
+  }
+
+  async refresh(dto: RefreshDto) {
+    let payload: RefreshPayload;
+    try {
+      payload = await this.jwtService.verifyAsync<RefreshPayload>(dto.refreshToken, {
+        secret: this.refreshSecret,
+      });
+    } catch {
+      throw new UnauthorizedException("Refresh token is invalid or expired.");
+    }
+
+    if (!payload.jti || !payload.sub || !payload.membershipId || !payload.organizationId) {
+      throw new UnauthorizedException("Refresh token is invalid.");
+    }
+
+    const stored = await this.prisma.refreshToken.findUnique({
+      where: { jti: payload.jti },
+      include: {
+        user: true,
+        organization: true,
+        membership: true,
+      },
+    });
+
+    if (
+      !stored ||
+      stored.userId !== payload.sub ||
+      stored.membershipId !== payload.membershipId ||
+      stored.organizationId !== payload.organizationId ||
+      stored.revokedAt ||
+      stored.expiresAt <= new Date() ||
+      !stored.user.isActive ||
+      !stored.organization.isActive ||
+      !stored.membership.isActive
+    ) {
+      throw new UnauthorizedException("Refresh token has been revoked or expired.");
+    }
+
+    const tokenMatches = await argon2.verify(stored.tokenHash, dto.refreshToken).catch(() => false);
+    if (!tokenMatches) {
+      throw new UnauthorizedException("Refresh token is invalid.");
+    }
+
+    const rotation = await this.prisma.refreshToken.updateMany({
+      where: { id: stored.id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    if (rotation.count !== 1) {
+      throw new UnauthorizedException("Refresh token has already been used.");
+    }
+
+    return this.issueTokens(stored.user, stored.organization, stored.membership);
+  }
+
+  async logout(dto: RefreshDto) {
+    try {
+      const payload = await this.jwtService.verifyAsync<RefreshPayload>(dto.refreshToken, {
+        secret: this.refreshSecret,
+      });
+      if (payload.jti) {
+        await this.prisma.refreshToken.updateMany({
+          where: { jti: payload.jti, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+      }
+    } catch {
+      // Logout is intentionally idempotent; invalid tokens are already unusable.
+    }
+    return { success: true };
+  }
+
+  async getProfile(auth: AuthenticatedUser) {
+    const membership = await this.prisma.membership.findFirst({
+      where: {
+        id: auth.membershipId,
+        userId: auth.sub,
+        organizationId: auth.organizationId,
+        isActive: true,
+        user: { isActive: true },
+        organization: { isActive: true },
+      },
+      include: {
+        user: { select: { id: true, email: true, name: true, createdAt: true } },
+        organization: { select: { id: true, name: true, slug: true } },
+      },
+    });
+
+    if (!membership) {
+      throw new UnauthorizedException("Workspace membership is no longer active.");
+    }
+
+    return {
+      user: membership.user,
+      organization: membership.organization,
+      role: membership.role,
+    };
+  }
+
+  private async issueTokens(
+    user: { id: string; email: string },
+    organization: { id: string },
+    membership: { id: string; role: MembershipRole },
+  ) {
+    const accessPayload: AuthenticatedUser = {
+      sub: user.id,
+      email: user.email,
+      organizationId: organization.id,
+      membershipId: membership.id,
+      role: membership.role,
+    };
+    const jti = randomUUID();
+    const refreshPayload: RefreshPayload = {
+      sub: user.id,
+      jti,
+      organizationId: organization.id,
+      membershipId: membership.id,
+    };
+
+    const [accessToken, refreshToken] = await Promise.all([
+      this.jwtService.signAsync(accessPayload, {
+        secret: this.accessSecret,
+        expiresIn: "15m",
+      }),
+      this.jwtService.signAsync(refreshPayload, {
+        secret: this.refreshSecret,
+        expiresIn: "30d",
+      }),
+    ]);
+
+    await this.prisma.refreshToken.create({
+      data: {
+        jti,
+        tokenHash: await argon2.hash(refreshToken),
+        userId: user.id,
+        organizationId: organization.id,
+        membershipId: membership.id,
+        expiresAt: new Date(Date.now() + this.refreshLifetimeMs),
+      },
+    });
+
+    return {
+      tokenType: "Bearer",
+      expiresIn: 900,
+      accessToken,
+      refreshToken,
+    };
+  }
+}
