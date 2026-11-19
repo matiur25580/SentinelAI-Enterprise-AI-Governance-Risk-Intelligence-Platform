@@ -29,6 +29,22 @@ export function validateEnvironment(config: Record<string, unknown>) {
     }
   }
 
+  const evidenceStorageKeys = ["EVIDENCE_S3_ENDPOINT", "EVIDENCE_S3_BUCKET", "EVIDENCE_S3_REGION", "EVIDENCE_S3_ACCESS_KEY_ID", "EVIDENCE_S3_SECRET_ACCESS_KEY"] as const;
+  const configuredEvidenceKeys = evidenceStorageKeys.filter((key) => typeof config[key] === "string" && String(config[key]).length > 0);
+  if (configuredEvidenceKeys.length > 0 && configuredEvidenceKeys.length !== evidenceStorageKeys.length) {
+    errors.push("Evidence storage requires EVIDENCE_S3_ENDPOINT, EVIDENCE_S3_BUCKET, EVIDENCE_S3_REGION, EVIDENCE_S3_ACCESS_KEY_ID, and EVIDENCE_S3_SECRET_ACCESS_KEY together.");
+  }
+  if (typeof config.EVIDENCE_S3_ENDPOINT === "string") {
+    try {
+      const endpoint = new URL(config.EVIDENCE_S3_ENDPOINT);
+      if (!["https:", "http:"].includes(endpoint.protocol) || endpoint.username || endpoint.password || endpoint.search || endpoint.hash) errors.push("EVIDENCE_S3_ENDPOINT must be a valid object storage endpoint without credentials, query, or fragment.");
+      if (nodeEnv === "production" && endpoint.protocol !== "https:") errors.push("EVIDENCE_S3_ENDPOINT must use HTTPS in production.");
+    } catch { errors.push("EVIDENCE_S3_ENDPOINT must be a valid URL."); }
+  }
+  if (typeof config.EVIDENCE_S3_SESSION_TOKEN === "string" && configuredEvidenceKeys.length !== evidenceStorageKeys.length) {
+    errors.push("EVIDENCE_S3_SESSION_TOKEN requires the complete evidence storage configuration.");
+  }
+
   const origins = typeof config.WEB_ORIGIN === "string" ? config.WEB_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean) : [];
   if (nodeEnv === "production" && origins.length === 0) errors.push("WEB_ORIGIN must be explicitly configured in production.");
   for (const origin of origins) {

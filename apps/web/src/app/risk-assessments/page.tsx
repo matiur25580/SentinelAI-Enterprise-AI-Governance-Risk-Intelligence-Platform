@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useState } from "react";
 
 type Asset = { id: string; name: string; assetType: string };
 type Assessment = {
@@ -12,6 +12,7 @@ type Assessment = {
   createdByMembership?: { user: { name: string } }; reviewedByMembership?: { user: { name: string } } | null;
 };
 type Profile = { user: { name: string }; organization: { name: string }; role: string };
+type EvidenceFile = { id: string; originalFileName: string; contentType: string; sizeBytes: string; checksumSha256: string; status: "PENDING_UPLOAD" | "UPLOADED" | "VERIFIED" | "REJECTED"; createdAt: string; uploadedAt?: string | null; verifiedAt?: string | null; verificationNote?: string | null; createdByMembership?: { user: { name: string } }; verifiedByMembership?: { user: { name: string } } | null };
 type FormState = { assetId: string; title: string; scope: string; intendedUse: string; dataSensitivity: number; autonomyLevel: number; impact: number; likelihood: number; exposure: number; mitigationCoverage: number; evidenceText: string };
 const API = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1").replace(/\/$/, "");
 const initialForm: FormState = { assetId: "", title: "", scope: "", intendedUse: "", dataSensitivity: 3, autonomyLevel: 2, impact: 3, likelihood: 3, exposure: 3, mitigationCoverage: 0, evidenceText: "" };
@@ -34,6 +35,10 @@ export default function RiskAssessmentsPage() {
   const [detail, setDetail] = useState<Assessment | null>(null);
   const [review, setReview] = useState<{ id: string; decision: "APPROVED" | "REJECTED" } | null>(null);
   const [rationale, setRationale] = useState("");
+  const [evidenceFiles, setEvidenceFiles] = useState<EvidenceFile[]>([]);
+  const [evidenceBusy, setEvidenceBusy] = useState(false);
+  const [evidenceDecision, setEvidenceDecision] = useState<{ id: string; decision: "VERIFIED" | "REJECTED" } | null>(null);
+  const [evidenceNote, setEvidenceNote] = useState("");
 
   const api = useCallback(async (path: string, options: RequestInit = {}) => {
     const response = await fetch(API + path, { ...options, headers: { "content-type": "application/json", ...(token ? { authorization: "Bearer " + token } : {}), ...options.headers } });
@@ -94,8 +99,47 @@ export default function RiskAssessmentsPage() {
   }
 
   async function openDetail(id: string) {
-    try { setDetail(await api("/risk-assessments/" + id)); }
-    catch (err) { setError(err instanceof Error ? err.message : "Unable to load assessment."); }
+    try {
+      const [record, files] = await Promise.all([api("/risk-assessments/" + id), api("/risk-assessments/" + id + "/evidence")]);
+      setDetail(record); setEvidenceFiles(files || []);
+    } catch (err) { setError(err instanceof Error ? err.message : "Unable to load assessment."); }
+  }
+
+  async function uploadEvidence(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]; if (!file || !detail) return;
+    setEvidenceBusy(true); setError(""); setMessage("");
+    try {
+      const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+      const checksumSha256 = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+      const intent = await api("/risk-assessments/" + detail.id + "/evidence/upload-intents", { method: "POST", body: JSON.stringify({ fileName: file.name, contentType: file.type, sizeBytes: file.size, checksumSha256 }) });
+      const uploaded = await fetch(intent.upload.url, { method: "PUT", headers: intent.upload.headers, body: file });
+      if (!uploaded.ok) throw new Error("Private object storage rejected the upload (" + uploaded.status + ").");
+      await api("/risk-assessments/" + detail.id + "/evidence/" + intent.evidence.id + "/complete", { method: "POST" });
+      setEvidenceFiles(await api("/risk-assessments/" + detail.id + "/evidence"));
+      setMessage("Evidence uploaded and checksum verified. Independent human review is still required.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Evidence upload failed."); }
+    finally { setEvidenceBusy(false); event.target.value = ""; }
+  }
+
+  async function downloadEvidence(id: string) {
+    if (!detail) return;
+    try {
+      const result = await api("/risk-assessments/" + detail.id + "/evidence/" + id + "/download", { method: "POST" });
+      window.open(result.url, "_blank", "noopener,noreferrer");
+    } catch (err) { setError(err instanceof Error ? err.message : "Unable to issue private download link."); }
+  }
+
+  async function decideEvidence(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (!detail || !evidenceDecision) return;
+    setEvidenceBusy(true); setError("");
+    try {
+      await api("/risk-assessments/" + detail.id + "/evidence/" + evidenceDecision.id + "/decision", { method: "POST", body: JSON.stringify({ decision: evidenceDecision.decision, note: evidenceNote }) });
+      const decision = evidenceDecision.decision;
+      setEvidenceDecision(null); setEvidenceNote("");
+      setEvidenceFiles(await api("/risk-assessments/" + detail.id + "/evidence"));
+      setMessage("Evidence " + decision.toLowerCase() + " with an audit rationale.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Evidence review failed."); }
+    finally { setEvidenceBusy(false); }
   }
 
   async function submitDraft(id: string) {
@@ -154,6 +198,11 @@ export default function RiskAssessmentsPage() {
       <div className="risk-detail-section"><h3>Risk dimensions</h3><div className="risk-dimension-list">{[["Data sensitivity",detail.dataSensitivity],["Autonomy level",detail.autonomyLevel],["Impact",detail.impact],["Likelihood",detail.likelihood],["Exposure",detail.exposure],["Mitigation coverage",detail.mitigationCoverage === undefined ? "—" : detail.mitigationCoverage + "%"]].map(([label,value]) => <span key={String(label)}>{label}<strong>{value ?? "—"}</strong></span>)}</div></div>
       <div className="risk-detail-section"><h3>Evidence references ({detail.evidence?.length || 0})</h3>{detail.evidence?.length ? <ul className="risk-evidence-list">{detail.evidence.map((entry,index) => <li key={index}>{/^https?:\/\//i.test(entry) ? <a href={entry} target="_blank" rel="noreferrer">{entry}</a> : <code>{entry}</code>}</li>)}</ul> : <p>No evidence references attached.</p>}</div>
       {detail.reviewRationale && <div className="risk-detail-section"><h3>Reviewer rationale</h3><p>{detail.reviewRationale}</p></div>}
+      <div className="risk-detail-section"><h3>Private evidence files ({evidenceFiles.length})</h3><p>Uploads are checksum-checked; independent human review is required.</p>
+        <label className="risk-evidence-upload">＋ Upload evidence file<input type="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.csv,application/pdf,image/png,image/jpeg,text/plain,text/csv" disabled={evidenceBusy} onChange={uploadEvidence} /></label>
+        {evidenceFiles.length > 0 ? <div className="risk-evidence-files">{evidenceFiles.map(file => <article key={file.id}><div><strong>{file.originalFileName}</strong><small>{file.contentType} · {(Number(file.sizeBytes)/1024).toFixed(1)} KB · SHA-256 {file.checksumSha256.slice(0,12)}…</small><span className={"risk-status " + file.status.toLowerCase()}>{file.status.replaceAll("_"," ")}</span>{file.verificationNote && <p>{file.verificationNote}</p>}<small>Uploaded by {file.createdByMembership?.user.name || "—"}{file.verifiedByMembership ? " · reviewed by " + file.verifiedByMembership.user.name : ""}</small></div><div className="risk-actions">{(file.status === "UPLOADED" || file.status === "VERIFIED") && <button onClick={() => downloadEvidence(file.id)}>Download</button>}{file.status === "UPLOADED" && ["OWNER","ADMIN","AI_GOVERNANCE","SECURITY_ANALYST","COMPLIANCE_OFFICER"].includes(profile?.role || "") && <><button onClick={() => { setEvidenceDecision({id:file.id,decision:"VERIFIED"}); setEvidenceNote(""); }}>Verify</button><button className="reject" onClick={() => { setEvidenceDecision({id:file.id,decision:"REJECTED"}); setEvidenceNote(""); }}>Reject</button></>}</div></article>)}</div> : <p>No private evidence files uploaded.</p>}
+        {evidenceDecision && <form className="risk-evidence-review" onSubmit={decideEvidence}><label className="risk-field">Verification rationale<textarea required minLength={10} maxLength={3000} rows={3} value={evidenceNote} onChange={e => setEvidenceNote(e.target.value)} placeholder="Record provenance, relevance, integrity, and review findings…" /></label><div className="risk-modal-actions"><button type="button" className="risk-secondary" onClick={() => setEvidenceDecision(null)}>Cancel</button><button className="risk-primary" disabled={evidenceBusy || evidenceNote.trim().length < 10}>{evidenceBusy ? "Saving…" : "Confirm " + evidenceDecision.decision.toLowerCase()}</button></div></form>}
+      </div>
       <div className="risk-detail-meta"><span>Scoring version <strong>{detail.scoringVersion}</strong></span><span>Created by <strong>{detail.createdByMembership?.user.name || "—"}</strong></span><span>Reviewed by <strong>{detail.reviewedByMembership?.user.name || "—"}</strong></span></div>
       <div className="risk-modal-actions"><button className="risk-secondary" onClick={() => setDetail(null)}>Close</button>{detail.status === "DRAFT" && <button className="risk-primary" disabled={busy} onClick={() => submitDraft(detail.id)}>Submit for review</button>}</div>
     </section></div>}

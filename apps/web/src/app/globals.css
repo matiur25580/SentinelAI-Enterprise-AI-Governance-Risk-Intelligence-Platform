@@ -58,3 +58,16 @@
  .risk-modal-actions{flex-wrap:wrap}
  .risk-create-button{flex:1}
 }
+
+
+/* Private evidence upload and independent verification */
+.risk-evidence-upload{display:inline-flex;align-items:center;gap:9px;margin:12px 0;padding:10px 13px;border:1px dashed #48658d;border-radius:7px;background:#13233a;color:#b8d2fb;font-size:10px;cursor:pointer}
+.risk-evidence-upload input{max-width:210px;color:#aabbd2;font-size:9px}
+.risk-evidence-files{display:grid;gap:9px;margin-top:10px}
+.risk-evidence-files article{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px;background:#111d2d;border:1px solid #283950;border-radius:7px}
+.risk-evidence-files article>div:first-child{display:grid;gap:6px;min-width:0}
+.risk-evidence-files strong{font-size:11px;color:#dce7f7;overflow-wrap:anywhere}
+.risk-evidence-files small{font-size:9px;color:#8092aa;overflow-wrap:anywhere}
+.risk-evidence-files p{font-size:10px;color:#aab9ce;margin:0}
+.risk-evidence-review{display:grid;gap:10px;margin-top:14px;padding:13px;background:#101c2b;border:1px solid #293b53;border-radius:7px}
+@media(max-width:620px){.risk-evidence-files article{align-items:flex-start;flex-direction:column}.risk-evidence-upload{flex-wrap:wrap}.risk-evidence-upload input{max-width:100%}}
