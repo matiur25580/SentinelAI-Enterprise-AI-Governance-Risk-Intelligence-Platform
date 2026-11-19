@@ -75,6 +75,11 @@ enum IncidentStatus {
   CLOSED
 }
 
+enum AccountActionTokenPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
 model Organization {
   id          String       @id @default(cuid())
   name        String
@@ -106,6 +111,7 @@ model User {
   memberships  Membership[]
   refreshTokens RefreshToken[]
   auditLogs    AuditLog[]     @relation("AuditActor")
+  accountActionTokens AccountActionToken[]
 
   @@index([isActive])
 }
@@ -152,6 +158,20 @@ model RefreshToken {
   @@index([familyId, revokedAt])
   @@index([userId, revokedAt])
   @@index([organizationId])
+  @@index([expiresAt])
+}
+
+model AccountActionToken {
+  id        String                     @id @default(cuid())
+  userId    String
+  purpose   AccountActionTokenPurpose
+  tokenHash String                     @unique
+  expiresAt DateTime
+  consumedAt DateTime?
+  createdAt DateTime                   @default(now())
+  user      User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose, consumedAt])
   @@index([expiresAt])
 }
 
