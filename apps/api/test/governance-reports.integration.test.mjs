@@ -115,7 +115,7 @@ test("governance report and downloadable PDF/ZIP audit package stay organization
 
   const archiveResponse = await requestBuffer("/governance/reports/export.zip", { token });
   assert.equal(archiveResponse.response.status, 200);
-  assert.match(archiveResponse.response.headers.get("content-type") || "", /application\\/zip/);
+  assert.match(archiveResponse.response.headers.get("content-type") || "", /application\/zip/);
   assert.match(archiveResponse.response.headers.get("content-disposition") || "", /sentinelai-governance-audit-package\\.zip/);
   assert.equal(archiveResponse.response.headers.get("cache-control"), "no-store");
   assert.equal(archiveResponse.buffer.subarray(0, 4).toString("hex"), "504b0304", "response is a ZIP archive");
@@ -139,7 +139,7 @@ test("governance report and downloadable PDF/ZIP audit package stay organization
   const isolated = await request("/governance/reports/summary", { token: outsider.data.accessToken });
   assert.equal(isolated.response.status, 200);
   assert.equal(isolated.data.incidents.total, 0);
-  assert.equal(isolated.data.audit.total, 1);\n
+  assert.equal(isolated.data.audit.total, 1);
   const outsiderPackage = await requestBuffer("/governance/reports/export.zip", { token: outsider.data.accessToken });
   assert.equal(outsiderPackage.response.status, 200);
   const outsiderFiles = unzipLocalEntries(outsiderPackage.buffer);
