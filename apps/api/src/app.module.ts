@@ -1,12 +1,12 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
-import { AuthModule } from "./auth/auth.module";
-import { HealthController } from "./health.controller";
-import { PrismaModule } from "./prisma/prisma.module";
+import { AuthModule } from "./auth/auth.module.js";
+import { HealthController } from "./health.controller.js";
+import { PrismaModule } from "./prisma/prisma.module.js";
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: "../../.env" }),
     PrismaModule,
     AuthModule,
   ],
