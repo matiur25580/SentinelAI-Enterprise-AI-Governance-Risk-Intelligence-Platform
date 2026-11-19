@@ -29,6 +29,17 @@ export function validateEnvironment(config: Record<string, unknown>) {
     }
   }
 
+  if (config.EVIDENCE_RETENTION_DAYS !== undefined) {
+    const days = Number(config.EVIDENCE_RETENTION_DAYS);
+    if (!Number.isInteger(days) || days < 0 || days > 36500) errors.push("EVIDENCE_RETENTION_DAYS must be an integer between 0 and 36500.");
+  }
+  if (config.EVIDENCE_RETENTION_CRON_TOKEN !== undefined) {
+    const token = config.EVIDENCE_RETENTION_CRON_TOKEN;
+    if (typeof token !== "string" || token.length < 32 || /\\s/.test(token) || PLACEHOLDER_SECRET_PREFIXES.some((prefix) => token.toLowerCase().startsWith(prefix))) {
+      errors.push("EVIDENCE_RETENTION_CRON_TOKEN must be at least 32 non-whitespace characters and must not be a placeholder.");
+    }
+  }
+
   const evidenceStorageKeys = ["EVIDENCE_S3_ENDPOINT", "EVIDENCE_S3_BUCKET", "EVIDENCE_S3_REGION", "EVIDENCE_S3_ACCESS_KEY_ID", "EVIDENCE_S3_SECRET_ACCESS_KEY"] as const;
   const configuredEvidenceKeys = evidenceStorageKeys.filter((key) => typeof config[key] === "string" && String(config[key]).length > 0);
   if (configuredEvidenceKeys.length > 0 && configuredEvidenceKeys.length !== evidenceStorageKeys.length) {
