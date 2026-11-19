@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -259,6 +260,37 @@ export class AuthService {
       organization: membership.organization,
       role: membership.role,
     };
+  }
+
+  async listSessions(auth: AuthenticatedUser) {
+    const sessions = await this.prisma.$queryRawUnsafe<Array<{
+      familyId: string;
+      createdAt: Date;
+      lastUsedAt: Date;
+      activeTokenCount: number;
+    }>>(
+      'SELECT "familyId", MIN("createdAt") AS "createdAt", MAX("createdAt") AS "lastUsedAt", COUNT(*) FILTER (WHERE "revokedAt" IS NULL AND "expiresAt" > NOW())::int AS "activeTokenCount" FROM "RefreshToken" WHERE "userId" = $1 AND "organizationId" = $2 AND "membershipId" = $3 GROUP BY "familyId" HAVING COUNT(*) FILTER (WHERE "revokedAt" IS NULL AND "expiresAt" > NOW()) > 0 ORDER BY MAX("createdAt") DESC LIMIT 100',
+      auth.sub, auth.organizationId, auth.membershipId,
+    );
+    return { data: sessions.map((session) => ({ sessionId: session.familyId, createdAt: session.createdAt, lastUsedAt: session.lastUsedAt, activeTokenCount: session.activeTokenCount })) };
+  }
+
+  async revokeSession(auth: AuthenticatedUser, familyId: string) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(familyId)) {
+      throw new BadRequestException("A valid session ID is required.");
+    }
+    const revoked = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.refreshToken.updateMany({
+        where: { familyId, userId: auth.sub, organizationId: auth.organizationId, membershipId: auth.membershipId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      if (result.count === 0) throw new NotFoundException("Active session not found.");
+      await tx.auditLog.create({
+        data: { organizationId: auth.organizationId, actorId: auth.sub, action: "auth.session.revoke", entityType: "RefreshToken", entityId: familyId, metadata: { revokedTokenCount: result.count } },
+      });
+      return result.count;
+    });
+    return { success: true, revokedTokenCount: revoked };
   }
 
   private async issueTokens(
