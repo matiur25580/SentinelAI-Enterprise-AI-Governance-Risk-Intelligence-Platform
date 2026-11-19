@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { EvidenceFileStatus, MembershipRole } from "../generated/prisma/client.js";
 import type { AuthenticatedUser } from "../auth/interfaces/authenticated-user.interface.js";
 import { PrismaService } from "../prisma/prisma.service.js";
@@ -18,7 +17,6 @@ export class EvidenceStorageService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: S3CompatibleStorage,
-    private readonly config: ConfigService,
   ) {}
 
   private assertRole(auth: AuthenticatedUser, roles: MembershipRole[]) {
