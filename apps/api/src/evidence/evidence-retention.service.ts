@@ -6,7 +6,7 @@ import { S3CompatibleStorage } from "./s3-compatible-storage.js";
 
 const BATCH_SIZE = 20;
 const ABANDONED_UPLOAD_GRACE_MS = 24 * 60 * 60 * 1000;
-const RETAINABLE_STATUSES = [EvidenceFileStatus.VERIFIED, EvidenceFileStatus.REJECTED, EvidenceFileStatus.QUARANTINED];
+const RETAINABLE_STATUSES = [EvidenceFileStatus.UPLOADED, EvidenceFileStatus.VERIFIED, EvidenceFileStatus.REJECTED, EvidenceFileStatus.QUARANTINED];
 
 @Injectable()
 export class EvidenceRetentionService {
