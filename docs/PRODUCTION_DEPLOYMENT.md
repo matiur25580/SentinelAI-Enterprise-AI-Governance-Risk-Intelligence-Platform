@@ -122,3 +122,8 @@ Configure these repository-level Actions variables under **Settings → Secrets 
 The workflow deliberately skips the smoke job and emits a notice when `API_BASE_URL` is not configured. This prevents an unconfigured workflow from being mistaken for a successful production check. Do not store secrets in these variables; the smoke checks require public service origins only.
 
 GitHub Actions scheduled runs are best-effort and are not a substitute for a dedicated uptime-monitoring provider or an on-call alert route. Configure notification/alert ownership separately before production go-live.
+
+
+## Account email security
+
+Email verification is enabled by default when `NODE_ENV=production`. The API then requires `RESEND_API_KEY`, `EMAIL_FROM`, and an HTTPS `APP_PUBLIC_URL` origin. Configure a verified sender/domain with Resend before enabling production registration. Verification links expire after 24 hours; password-reset links expire after 30 minutes. Both use random one-time tokens stored only as SHA-256 hashes. A successful password reset revokes every refresh-token family for the account, immediately invalidating existing access sessions. The email request endpoints return generic responses to reduce account-enumeration risk. In non-production environments, email verification can be enabled explicitly with `AUTH_REQUIRE_VERIFIED_EMAIL=true`.

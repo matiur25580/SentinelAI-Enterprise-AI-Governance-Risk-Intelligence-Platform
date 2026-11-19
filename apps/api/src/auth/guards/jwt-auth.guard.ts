@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
+import { ConfigService } from "@nestjs/config";
 import type { Request } from "express";
 import { PrismaService } from "../../prisma/prisma.service.js";
 import type { AuthenticatedUser } from "../interfaces/authenticated-user.interface.js";
@@ -13,10 +14,15 @@ type AuthenticatedRequest = Request & { user: AuthenticatedUser };
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
+  private readonly requireEmailVerification: boolean;
+
   constructor(
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
-  ) {}
+    config: ConfigService,
+  ) {
+    this.requireEmailVerification = config.get<boolean>("AUTH_REQUIRE_VERIFIED_EMAIL") ?? (config.get<string>("NODE_ENV") === "production");
+  }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
@@ -47,7 +53,7 @@ export class JwtAuthGuard implements CanActivate {
               expiresAt: { gt: new Date() },
             },
           },
-          user: { isActive: true },
+          user: { isActive: true, ...(this.requireEmailVerification ? { emailVerifiedAt: { not: null } } : {}) },
           organization: { isActive: true },
         },
         select: { role: true },

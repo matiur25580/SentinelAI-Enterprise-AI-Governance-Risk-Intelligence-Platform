@@ -8,6 +8,10 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { AuthService } from "./auth.service.js";
+import { AccountLifecycleService } from "./account-lifecycle.service.js";
+import { EmailActionRequestDto } from "./dto/email-action-request.dto.js";
+import { EmailVerificationDto } from "./dto/email-verification.dto.js";
+import { PasswordResetDto } from "./dto/password-reset.dto.js";
 import { CurrentUser } from "./decorators/current-user.decorator.js";
 import { LoginDto } from "./dto/login.dto.js";
 import { RefreshDto } from "./dto/refresh.dto.js";
@@ -17,11 +21,34 @@ import type { AuthenticatedUser } from "./interfaces/authenticated-user.interfac
 
 @Controller("auth")
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly accountLifecycle: AccountLifecycleService,
+  ) {}
 
   @Post("register")
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
+  }
+
+  @Post("email/verification/request")
+  requestEmailVerification(@Body() dto: EmailActionRequestDto) {
+    return this.accountLifecycle.requestEmailVerification(dto.email);
+  }
+
+  @Post("email/verification/confirm")
+  confirmEmailVerification(@Body() dto: EmailVerificationDto) {
+    return this.accountLifecycle.confirmEmailVerification(dto.token);
+  }
+
+  @Post("password/forgot")
+  requestPasswordReset(@Body() dto: EmailActionRequestDto) {
+    return this.accountLifecycle.requestPasswordReset(dto.email);
+  }
+
+  @Post("password/reset")
+  resetPassword(@Body() dto: PasswordResetDto) {
+    return this.accountLifecycle.resetPassword(dto.token, dto.password);
   }
 
   @Post("login")

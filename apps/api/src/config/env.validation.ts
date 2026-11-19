@@ -3,6 +3,33 @@ const PLACEHOLDER_SECRET_PREFIXES = ["replace-", "change-this", "your-"];
 export function validateEnvironment(config: Record<string, unknown>) {
   const errors: string[] = [];
   const nodeEnv = String(config.NODE_ENV ?? "development");
+  const authVerificationSetting = config.AUTH_REQUIRE_VERIFIED_EMAIL;
+  if (
+    authVerificationSetting !== undefined &&
+    authVerificationSetting !== true &&
+    authVerificationSetting !== false &&
+    authVerificationSetting !== "true" &&
+    authVerificationSetting !== "false"
+  ) {
+    errors.push("AUTH_REQUIRE_VERIFIED_EMAIL must be true or false.");
+  }
+  const requireVerifiedEmail = authVerificationSetting === undefined
+    ? nodeEnv === "production"
+    : authVerificationSetting === true || authVerificationSetting === "true";
+  if (nodeEnv === "production" && !requireVerifiedEmail) {
+    errors.push("AUTH_REQUIRE_VERIFIED_EMAIL cannot be disabled in production.");
+  }
+  if (requireVerifiedEmail) {
+    for (const key of ["RESEND_API_KEY", "EMAIL_FROM", "APP_PUBLIC_URL"] as const) {
+      if (typeof config[key] !== "string" || String(config[key]).trim().length === 0) errors.push(`${key} is required when email verification is enabled.`);
+    }
+    if (typeof config.APP_PUBLIC_URL === "string") {
+      try {
+        const publicUrl = new URL(config.APP_PUBLIC_URL);
+        if (publicUrl.protocol !== "https:" || publicUrl.origin !== config.APP_PUBLIC_URL || publicUrl.username || publicUrl.password) errors.push("APP_PUBLIC_URL must be an HTTPS origin without paths or credentials when email verification is enabled.");
+      } catch { errors.push("APP_PUBLIC_URL must be a valid HTTPS origin."); }
+    }
+  }
   if (!["development", "test", "production"].includes(nodeEnv)) errors.push("NODE_ENV must be development, test, or production.");
 
   for (const key of ["JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET"] as const) {
@@ -72,5 +99,5 @@ export function validateEnvironment(config: Record<string, unknown>) {
     } catch { errors.push("WEB_ORIGIN must contain comma-separated valid origins."); break; }
   }
   if (errors.length > 0) throw new Error(`Invalid environment configuration: ${errors.join(" ")}`);
-  return { ...config, NODE_ENV: nodeEnv, API_PORT: port };
+  return { ...config, NODE_ENV: nodeEnv, API_PORT: port, AUTH_REQUIRE_VERIFIED_EMAIL: requireVerifiedEmail };
 }

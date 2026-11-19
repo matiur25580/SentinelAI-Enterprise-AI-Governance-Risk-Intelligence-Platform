@@ -15,6 +15,7 @@ import type { LoginDto } from "./dto/login.dto.js";
 import type { RefreshDto } from "./dto/refresh.dto.js";
 import type { RegisterDto } from "./dto/register.dto.js";
 import type { AuthenticatedUser } from "./interfaces/authenticated-user.interface.js";
+import { AccountLifecycleService } from "./account-lifecycle.service.js";
 
 interface RefreshPayload {
   sub: string;
@@ -29,12 +30,15 @@ export class AuthService {
   private readonly accessSecret: string;
   private readonly refreshSecret: string;
   private readonly refreshLifetimeMs = 30 * 24 * 60 * 60 * 1000;
+  private readonly requireEmailVerification: boolean;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     config: ConfigService,
+    private readonly accountLifecycle: AccountLifecycleService,
   ) {
+    this.requireEmailVerification = config.get<boolean>("AUTH_REQUIRE_VERIFIED_EMAIL") ?? (config.get<string>("NODE_ENV") === "production");
     this.accessSecret = config.getOrThrow<string>("JWT_ACCESS_SECRET");
     this.refreshSecret = config.getOrThrow<string>("JWT_REFRESH_SECRET");
 
@@ -98,6 +102,11 @@ export class AuthService {
       return { user, organization, membership };
     });
 
+    if (this.requireEmailVerification) {
+      await this.accountLifecycle.issueEmailVerification(result.user.id);
+      return { emailVerificationRequired: true, message: "Check your email for a verification link before signing in." };
+    }
+
     return this.issueTokens(result.user, result.organization, result.membership);
   }
 
@@ -120,6 +129,9 @@ export class AuthService {
     const passwordMatches = await argon2.verify(user.passwordHash, dto.password).catch(() => false);
     if (!passwordMatches) {
       throw new UnauthorizedException("Invalid email or password.");
+    }
+    if (this.requireEmailVerification && !user.emailVerifiedAt) {
+      throw new UnauthorizedException("Email verification is required before signing in.");
     }
 
     const memberships = dto.organizationSlug
@@ -197,6 +209,7 @@ export class AuthService {
     if (
       stored.expiresAt <= new Date() ||
       !stored.user.isActive ||
+      (this.requireEmailVerification && !stored.user.emailVerifiedAt) ||
       !stored.organization.isActive ||
       !stored.membership.isActive
     ) {

@@ -4,6 +4,8 @@ import { JwtModule } from "@nestjs/jwt";
 import { PrismaModule } from "../prisma/prisma.module.js";
 import { AuthController } from "./auth.controller.js";
 import { AuthService } from "./auth.service.js";
+import { AccountLifecycleService } from "./account-lifecycle.service.js";
+import { AccountEmailService } from "./account-email.service.js";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard.js";
 import { RolesGuard } from "./guards/roles.guard.js";
 
@@ -21,7 +23,7 @@ import { RolesGuard } from "./guards/roles.guard.js";
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtAuthGuard, RolesGuard],
+  providers: [AuthService, AccountLifecycleService, AccountEmailService, JwtAuthGuard, RolesGuard],
   exports: [JwtModule, JwtAuthGuard, RolesGuard],
 })
 export class AuthModule {}
