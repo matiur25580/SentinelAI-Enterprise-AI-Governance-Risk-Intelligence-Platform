@@ -265,7 +265,7 @@ export class AuthService {
     user: { id: string; email: string },
     organization: { id: string },
     membership: { id: string; role: MembershipRole },
-    familyId = randomUUID(),
+    familyId: string = randomUUID(),
   ) {
     const accessPayload: AuthenticatedUser = {
       sub: user.id,
