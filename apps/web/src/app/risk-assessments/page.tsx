@@ -85,8 +85,7 @@ export default function RiskAssessmentsPage() {
   async function createAssessment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError(""); setMessage("");
     try {
-      const evidence = form.evidenceText.split("
-").map(v => v.trim()).filter(Boolean);
+      const evidence = form.evidenceText.split("\n").map(v => v.trim()).filter(Boolean);
       if (evidence.length > 30) throw new Error("Add no more than 30 evidence references.");
       await api("/assets/" + form.assetId + "/risk-assessments", { method: "POST", body: JSON.stringify({
         title: form.title, scope: form.scope, intendedUse: form.intendedUse, dataSensitivity: form.dataSensitivity,
@@ -189,8 +188,7 @@ export default function RiskAssessmentsPage() {
         <label className="risk-field">Autonomy level<select value={form.autonomyLevel} onChange={e => setField("autonomyLevel", Number(e.target.value))}>{[1,2,3,4,5].map(v => <option key={v} value={v}>{v}</option>)}</select></label>
         {(["impact","likelihood","exposure"] as const).map(key => <label className="risk-field" key={key}>{key[0].toUpperCase()+key.slice(1)} (1–5)<select value={form[key]} onChange={e => setField(key, Number(e.target.value))}>{[1,2,3,4,5].map(v => <option key={v} value={v}>{v}</option>)}</select></label>)}
         <label className="risk-field">Mitigation coverage (%)<input type="number" min={0} max={100} required value={form.mitigationCoverage} onChange={e => setField("mitigationCoverage", Number(e.target.value))} /></label>
-        <label className="risk-field full">Evidence references <span className="risk-field-hint">One URL or document identifier per line, maximum 30. References only; no file upload or verification is implied.</span><textarea rows={4} value={form.evidenceText} onChange={e => setField("evidenceText", e.target.value)} placeholder={"https://example.com/model-card
-GRC-2026-014"} /></label>
+        <label className="risk-field full">Evidence references <span className="risk-field-hint">One URL or document identifier per line, maximum 30. References only; no file upload or verification is implied.</span><textarea rows={4} value={form.evidenceText} onChange={e => setField("evidenceText", e.target.value)} placeholder={"https://example.com/model-card\nGRC-2026-014"} /></label>
         <div className="risk-modal-actions"><button type="button" className="risk-secondary" onClick={() => setShowCreate(false)}>Cancel</button><button className="risk-primary" disabled={busy || !form.assetId || assets.length === 0}>{busy ? "Creating…" : "Create draft assessment"}</button></div>
       </form></section></div>}
 
