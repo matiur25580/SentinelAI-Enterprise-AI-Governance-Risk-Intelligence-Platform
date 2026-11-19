@@ -38,3 +38,14 @@ Authorization: Bearer <access-token>
 The response contains a `data` array and `pagination` metadata (`page`, `limit`, `total`, and `totalPages`). Entries are ordered newest-first and include the actor's ID, email, and display name when the actor still exists.
 
 Every query is constrained by the organization ID resolved from the authenticated active membership. Clients cannot supply or override the organization scope.
+
+## CSV export
+
+Authorized compliance roles can export matching audit events as CSV:
+
+```http
+GET /api/v1/audit-logs/export.csv?entityType=AIAsset&from=2026-01-01T00:00:00Z&to=2026-12-31T23:59:59Z
+Authorization: Bearer <access-token>
+```
+
+The export uses the same filters and organization scope as the JSON endpoint. It is ordered newest-first and includes event identifiers, timestamps, actor identity, action, entity information, and metadata. The endpoint returns an attachment with `Cache-Control: no-store` and a maximum of 10,000 records; requests exceeding that limit must narrow their filters. CSV cells are quoted and spreadsheet formula prefixes are neutralized to reduce CSV injection risk. Exports are generated on demand and are not stored by the API.
