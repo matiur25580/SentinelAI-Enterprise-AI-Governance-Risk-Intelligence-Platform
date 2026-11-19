@@ -71,3 +71,15 @@ All incident endpoints require an authenticated bearer token and operate within 
 | PATCH | `/incidents/:id` | Advance lifecycle, assign an active workspace member, or record resolution (workspace incident-manager roles) |
 
 Lifecycle transitions are `OPEN → TRIAGED → INVESTIGATING → RESOLVED → CLOSED`. A resolved incident may be reopened to `INVESTIGATING`; a closed incident is terminal. A resolution summary is required before resolution. Every create/update is recorded in the append-only organization audit chain. Supported incident-manager roles: `OWNER`, `ADMIN`, `AI_GOVERNANCE`, `SECURITY_ANALYST`, and `COMPLIANCE_OFFICER`.
+
+
+## Executive governance reports
+
+Authenticated workspace reporting endpoints are restricted to organization governance roles (OWNER, ADMIN, AI_GOVERNANCE, SECURITY_ANALYST, COMPLIANCE_OFFICER, AUDITOR).
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/governance/reports/summary` | Organization-scoped asset, assessment, incident, evidence, and audit aggregates |
+| GET | `/governance/reports/export.csv` | Spreadsheet-safe CSV export of the same summary |
+
+Optional `from` and `to` ISO date-time query parameters filter records by their creation timestamp (inclusive). Omitting both returns all-time totals. The report labels its period explicitly, includes the latest 10 audit events, and states that SentinelAI risk bands are project-specific triage heuristics rather than regulatory certifications.
