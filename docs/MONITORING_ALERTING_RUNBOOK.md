@@ -7,6 +7,7 @@ This is a provider-neutral operations plan for SentinelAI. It documents what an 
 - API liveness: `GET /api/v1/health`. Use this to detect whether the API process responds; it is not a dependency check.
 - API readiness: `GET /api/v1/health/ready`. Use this for traffic readiness and database-connectivity monitoring. It returns HTTP 503 when PostgreSQL is unavailable.
 - Request telemetry: each API response includes a server-generated `X-Request-Id`; the API emits one JSON `http.request` event on response completion with the request ID, method, route template, status code, and duration.
+- Prometheus metrics: `GET /api/v1/metrics` exports in-process HTTP request counters (method, route template, status code) and latency histograms. It returns 404 unless `METRICS_BEARER_TOKEN` is configured with at least 32 characters and the matching bearer token is supplied. Scrape it over a private network and rotate the token through the hosting secret manager.
 - CI: GitHub Actions runs the repository Quality and Security workflows on their configured events.
 - PostgreSQL and Redis are defined for local development in Docker Compose. Production database/Redis monitoring must be configured in the selected provider.
 - The repository does not currently define a production metrics exporter, tracing backend, centralized log pipeline, pager integration, or alert rules. Do not assume these are enabled.
@@ -17,7 +18,7 @@ Configure the following in the hosting/observability provider, with access restr
 
 ### API service
 - Request count and rate, grouped by route template and status class (avoid raw URLs containing identifiers).
-- Request latency percentiles (p50, p95, p99) and 4xx/5xx rates.
+- Request latency percentiles (p50, p95, p99) and 4xx/5xx rates. Derive these from `sentinelai_http_request_duration_seconds` and `sentinelai_http_requests_total` in the Prometheus scrape endpoint; aggregate across replicas in the metrics backend.
 - Process restarts, memory/CPU utilization, event-loop saturation, and instance availability.
 - PostgreSQL connection acquisition failures, query latency, pool saturation, and timeout counts.
 - Authentication outcomes and rate-limit responses (aggregate counts only; never log passwords, tokens, authorization headers, or raw IP addresses).
