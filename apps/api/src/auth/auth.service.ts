@@ -209,6 +209,7 @@ export class AuthService {
     if (
       stored.expiresAt <= new Date() ||
       !stored.user.isActive ||
+      (this.requireEmailVerification && !stored.user.emailVerifiedAt) ||
       !stored.organization.isActive ||
       !stored.membership.isActive
     ) {
