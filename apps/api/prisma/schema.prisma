@@ -240,6 +240,9 @@ model EvidenceFile {
   checksumSha256        String
   status                EvidenceFileStatus @default(PENDING_UPLOAD)
   uploadExpiresAt       DateTime
+  retentionExpiresAt    DateTime?
+  legalHoldAt           DateTime?
+  legalHoldReason       String?
   uploadedAt            DateTime?
   verifiedAt            DateTime?
   verificationNote      String?
@@ -253,4 +256,5 @@ model EvidenceFile {
   @@index([organizationId, riskAssessmentId, createdAt])
   @@index([organizationId, status])
   @@index([uploadExpiresAt, status])
+  @@index([status, retentionExpiresAt, legalHoldAt])
 }
