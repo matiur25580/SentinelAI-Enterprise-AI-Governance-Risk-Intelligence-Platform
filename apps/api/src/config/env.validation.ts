@@ -22,6 +22,12 @@ export function validateEnvironment(config: Record<string, unknown>) {
   const port = Number(config.API_PORT ?? 4000);
   if (!Number.isInteger(port) || port < 1 || port > 65535) errors.push("API_PORT must be an integer between 1 and 65535.");
   if (config.TRUST_PROXY_HOPS !== undefined) { const hops = Number(config.TRUST_PROXY_HOPS); if (!Number.isInteger(hops) || hops < 1) errors.push("TRUST_PROXY_HOPS must be a positive integer when configured."); }
+  if (config.METRICS_BEARER_TOKEN !== undefined) {
+    const token = config.METRICS_BEARER_TOKEN;
+    if (typeof token !== "string" || token.length < 32 || /\\s/.test(token) || PLACEHOLDER_SECRET_PREFIXES.some((prefix) => token.toLowerCase().startsWith(prefix))) {
+      errors.push("METRICS_BEARER_TOKEN must be at least 32 non-whitespace characters and must not be a placeholder.");
+    }
+  }
 
   const origins = typeof config.WEB_ORIGIN === "string" ? config.WEB_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean) : [];
   if (nodeEnv === "production" && origins.length === 0) errors.push("WEB_ORIGIN must be explicitly configured in production.");
