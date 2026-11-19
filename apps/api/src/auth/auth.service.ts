@@ -156,7 +156,7 @@ export class AuthService {
       throw new UnauthorizedException("Refresh token is invalid or expired.");
     }
 
-    if (!payload.jti || !payload.sub || !payload.membershipId || !payload.organizationId) {
+    if (!payload.jti || !payload.sub || !payload.membershipId || !payload.organizationId || !payload.familyId) {
       throw new UnauthorizedException("Refresh token is invalid.");
     }
 
