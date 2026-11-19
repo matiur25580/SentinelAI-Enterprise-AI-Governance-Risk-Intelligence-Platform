@@ -56,23 +56,20 @@ export class GovernanceReportsService {
       }),
     ]);
 
-    const countMap = <T extends string>(rows: Array<{ [key: string]: unknown; _count: { _all: number } }>, key: string) =>
-      rows.map((row) => ({ [key]: row[key], count: row._count._all }));
-
     return {
       generatedAt: new Date().toISOString(),
       period: { from: query.from ?? null, to: query.to ?? null, mode: query.from || query.to ? "FILTERED" : "ALL_TIME" },
-      assets: { total: assetTotal, byStatus: countMap(assetStatus, "status"), byType: countMap(assetType, "assetType") },
+      assets: { total: assetTotal, byStatus: assetStatus.map((row) => ({ status: row.status, count: row._count._all })), byType: assetType.map((row) => ({ assetType: row.assetType, count: row._count._all })) },
       assessments: {
         total: assessmentTotal,
-        byStatus: countMap(assessmentStatus, "status"),
-        byResidualLevel: countMap(assessmentLevel, "residualLevel"),
+        byStatus: assessmentStatus.map((row) => ({ status: row.status, count: row._count._all })),
+        byResidualLevel: assessmentLevel.map((row) => ({ residualLevel: row.residualLevel, count: row._count._all })),
         averageResidualScore: Number((assessmentAverage._avg.residualScore ?? 0).toFixed(2)),
       },
-      incidents: { total: incidentTotal, byStatus: countMap(incidentStatus, "status"), bySeverity: countMap(incidentSeverity, "severity") },
+      incidents: { total: incidentTotal, byStatus: incidentStatus.map((row) => ({ status: row.status, count: row._count._all })), bySeverity: incidentSeverity.map((row) => ({ severity: row.severity, count: row._count._all })) },
       evidence: {
         total: evidenceTotal,
-        byStatus: countMap(evidenceStatus, "status"),
+        byStatus: evidenceStatus.map((row) => ({ status: row.status, count: row._count._all })),
         underLegalHold: evidenceLegalHold,
       },
       audit: { total: auditTotal, recentActivity },
