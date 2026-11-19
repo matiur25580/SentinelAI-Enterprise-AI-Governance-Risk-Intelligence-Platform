@@ -1,9 +1,11 @@
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module.js";
+import { requestTelemetryMiddleware } from "./observability/request-telemetry.middleware.js";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  app.use(requestTelemetryMiddleware);
   app.setGlobalPrefix("api/v1");
   const trustProxyHops = process.env.TRUST_PROXY_HOPS;
   if (trustProxyHops !== undefined) {
@@ -17,6 +19,7 @@ async function bootstrap() {
   app.enableCors({
     origin: process.env.WEB_ORIGIN?.split(",").map((origin) => origin.trim()).filter(Boolean) ?? ["http://localhost:3000"],
     credentials: true,
+    exposedHeaders: ["X-Request-Id"],
   });
   app.useGlobalPipes(
     new ValidationPipe({
