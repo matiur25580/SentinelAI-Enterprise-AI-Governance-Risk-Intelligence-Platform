@@ -127,7 +127,13 @@ test("register, login, refresh rotation, and logout work against PostgreSQL", { 
     await database.query('UPDATE "Membership" SET "role" = \'AUDITOR\', "updatedAt" = NOW() WHERE "id" = $1', [secondMembershipId]);
     const secondaryAuditLogs = await request("/audit-logs", { token: secondaryLogin.data.accessToken });
     assert.equal(secondaryAuditLogs.response.status, 200, JSON.stringify(secondaryAuditLogs.data));
-    assert.equal(secondaryAuditLogs.data.pagination.total, 0, "Audit history must be isolated by workspace.");
+    assert.equal(secondaryAuditLogs.data.pagination.total, 1);
+    assert.ok(
+      secondaryAuditLogs.data.data.every((entry) =>
+        entry.organizationId === secondOrganizationId && entry.action === "auth.login"
+      ),
+      "A workspace must see only its own audit history, never another workspace's asset events.",
+    );
     await database.query('UPDATE "Membership" SET "role" = \'MEMBER\', "updatedAt" = NOW() WHERE "id" = $1', [secondMembershipId]);
 
     const primaryMembership = await database.query(
