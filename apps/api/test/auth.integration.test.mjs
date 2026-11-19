@@ -134,7 +134,15 @@ test("register, login, refresh rotation, and logout work against PostgreSQL", { 
       ),
       "A workspace must see only its own audit history, never another workspace's asset events.",
     );
-    // Restore an asset-authorized role so cross-workspace writes reach the tenant-scoped service.
+    const secondaryAuditExport = await request("/audit-logs/export.csv", {
+      token: secondaryLogin.data.accessToken,
+    });
+    assert.equal(secondaryAuditExport.response.status, 200);
+    assert.match(secondaryAuditExport.response.headers.get("content-type"), /text\/csv/);
+    assert.match(secondaryAuditExport.response.headers.get("content-disposition"), /attachment/);
+    assert.match(secondaryAuditExport.data.raw, /auth\.login/);
+    assert.ok(!secondaryAuditExport.data.raw.includes("Customer Support LLM"));
+    assert.ok(!secondaryAuditExport.data.raw.includes(profile.data.organization.id));
     await database.query('UPDATE "Membership" SET "role" = \'OWNER\', "updatedAt" = NOW() WHERE "id" = $1', [secondMembershipId]);
 
     const primaryMembership = await database.query(
@@ -200,6 +208,8 @@ test("register, login, refresh rotation, and logout work against PostgreSQL", { 
     assert.equal(memberUpdateDenied.response.status, 403, "MEMBER cannot update assets.");
     const memberAuditDenied = await request("/audit-logs", { token: register.data.accessToken });
     assert.equal(memberAuditDenied.response.status, 403, "MEMBER cannot read compliance audit logs.");
+    const memberAuditExportDenied = await request("/audit-logs/export.csv", { token: register.data.accessToken });
+    assert.equal(memberAuditExportDenied.response.status, 403, "MEMBER cannot export compliance audit logs.");
 
     await setPrimaryRole("AI_ENGINEER");
     const updatedAsset = await request(`/assets/${createdAsset.data.id}`, {
@@ -238,6 +248,27 @@ test("register, login, refresh rotation, and logout work against PostgreSQL", { 
     assert.ok(auditLogs.data.data.some((entry) => entry.action === "asset.delete"));
     assert.ok(auditLogs.data.data.every((entry) => entry.organizationId === profile.data.organization.id));
     assert.ok(auditLogs.data.data.every((entry) => entry.actor?.email === email));
+
+    const primaryAuditExport = await request("/audit-logs/export.csv?entityType=AIAsset", {
+      token: register.data.accessToken,
+    });
+    assert.equal(primaryAuditExport.response.status, 200);
+    assert.match(primaryAuditExport.data.raw, /asset\.create/);
+    assert.match(primaryAuditExport.data.raw, /asset\.update/);
+    assert.match(primaryAuditExport.data.raw, /asset\.delete/);
+    assert.ok(!primaryAuditExport.data.raw.includes(secondOrganizationId));
+
+    const filteredAuditExport = await request("/audit-logs/export.csv?action=asset.create&entityType=AIAsset", {
+      token: register.data.accessToken,
+    });
+    assert.equal(filteredAuditExport.response.status, 200);
+    assert.ok(filteredAuditExport.data.raw.includes("asset.create"));
+    assert.ok(!filteredAuditExport.data.raw.includes("asset.delete"));
+
+    const invalidExportRange = await request("/audit-logs/export.csv?from=2026-11-20T00:00:00Z&to=2026-11-19T00:00:00Z", {
+      token: register.data.accessToken,
+    });
+    assert.equal(invalidExportRange.response.status, 400);
 
     const filteredAuditLogs = await request("/audit-logs?action=asset.create&entityType=AIAsset", {
       token: register.data.accessToken,
