@@ -66,6 +66,7 @@ export class AccountLifecycleService {
       !action ||
       action.purpose !== AccountActionTokenPurpose.EMAIL_VERIFICATION ||
       action.consumedAt ||
+      action.user.emailVerifiedAt ||
       action.expiresAt <= now ||
       !action.user.isActive
     ) {
@@ -85,10 +86,13 @@ export class AccountLifecycleService {
       if (consumed.count !== 1) {
         throw new UnauthorizedException("The account action token is invalid or expired.");
       }
-      await tx.user.update({
-        where: { id: action.userId },
+      const verified = await tx.user.updateMany({
+        where: { id: action.userId, isActive: true, emailVerifiedAt: null },
         data: { emailVerifiedAt: now },
       });
+      if (verified.count !== 1) {
+        throw new UnauthorizedException("The account action token is invalid or expired.");
+      }
       const memberships = await tx.membership.findMany({
         where: { userId: action.userId, isActive: true },
         select: { organizationId: true },
@@ -166,10 +170,13 @@ export class AccountLifecycleService {
       if (consumed.count !== 1) {
         throw new UnauthorizedException("The account action token is invalid or expired.");
       }
-      await tx.user.update({
-        where: { id: action.userId },
+      const updated = await tx.user.updateMany({
+        where: { id: action.userId, isActive: true },
         data: { passwordHash },
       });
+      if (updated.count !== 1) {
+        throw new UnauthorizedException("The account action token is invalid or expired.");
+      }
       await tx.refreshToken.updateMany({
         where: { userId: action.userId, revokedAt: null },
         data: { revokedAt: now },
