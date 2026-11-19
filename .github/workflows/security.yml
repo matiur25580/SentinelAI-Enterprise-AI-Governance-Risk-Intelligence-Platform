@@ -2,7 +2,7 @@ name: Security
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, "security/**"]
   pull_request:
     branches: [main, master]
   schedule:
@@ -18,9 +18,13 @@ jobs:
   dependency-audit:
     name: Dependency vulnerability audit
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref }}
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -31,6 +35,23 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - name: Regenerate lockfile from patched dependency overrides
+        run: pnpm install --lockfile-only --ignore-scripts
+
+      - name: Commit updated lockfile on this PR branch
+        if: >-
+          github.event_name == 'pull_request' &&
+          startsWith(github.event.pull_request.head.ref, 'security/') &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          if [ -n "$(git status --porcelain -- pnpm-lock.yaml)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add pnpm-lock.yaml
+            git commit -m "chore: update pnpm lockfile with security overrides"
+            git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          fi
 
       - name: Install locked workspace dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
