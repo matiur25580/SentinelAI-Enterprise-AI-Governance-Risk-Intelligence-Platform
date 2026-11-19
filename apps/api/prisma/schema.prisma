@@ -44,7 +44,7 @@ enum RiskAssessmentStatus {
   REJECTED
 }
 
-enum RiskLevel {
+enum EvidenceFileStatus {\n  PENDING_UPLOAD\n  UPLOADED\n  VERIFIED\n  REJECTED\n}\n\nenum RiskLevel {
   LOW
   MEDIUM
   HIGH
@@ -63,7 +63,7 @@ model Organization {
   refreshTokens RefreshToken[]
   auditLogs   AuditLog[]
   auditChainHead AuditChainHead?
-  riskAssessments RiskAssessment[]
+  riskAssessments RiskAssessment[]\n  evidenceFiles EvidenceFile[]
 
   @@index([isActive])
 }
@@ -97,7 +97,7 @@ model Membership {
   refreshTokens  RefreshToken[]
   assets         AIAsset[]      @relation("AssetOwner")
   riskAssessmentsCreated RiskAssessment[] @relation("RiskAssessmentCreator")
-  riskAssessmentsReviewed RiskAssessment[] @relation("RiskAssessmentReviewer")
+  riskAssessmentsReviewed RiskAssessment[] @relation("RiskAssessmentReviewer")\n  evidenceFilesCreated EvidenceFile[] @relation("EvidenceFileCreator")\n  evidenceFilesVerified EvidenceFile[] @relation("EvidenceFileVerifier")
 
   @@unique([userId, organizationId])
   @@index([organizationId, role])
@@ -206,7 +206,7 @@ model RiskAssessment {
   organization          Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   asset                 AIAsset              @relation(fields: [assetId], references: [id], onDelete: Restrict)
   createdByMembership  Membership           @relation("RiskAssessmentCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
-  reviewedByMembership Membership?          @relation("RiskAssessmentReviewer", fields: [reviewedByMembershipId], references: [id], onDelete: Restrict)
+  reviewedByMembership Membership?          @relation("RiskAssessmentReviewer", fields: [reviewedByMembershipId], references: [id], onDelete: Restrict)\n  evidenceFiles          EvidenceFile[]
 
   @@index([organizationId, status, createdAt])
   @@index([organizationId, residualLevel])
