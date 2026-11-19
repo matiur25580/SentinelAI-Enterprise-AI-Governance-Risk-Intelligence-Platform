@@ -304,6 +304,7 @@ export class AuthService {
       email: user.email,
       organizationId: organization.id,
       membershipId: membership.id,
+      sessionId: familyId,
       role: membership.role,
     };
     const jti = randomUUID();
