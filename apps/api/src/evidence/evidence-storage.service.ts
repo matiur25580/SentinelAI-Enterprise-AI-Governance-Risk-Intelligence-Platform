@@ -6,11 +6,25 @@ import { PrismaService } from "../prisma/prisma.service.js";
 import { S3CompatibleStorage } from "./s3-compatible-storage.js";
 import type { CreateEvidenceUploadDto } from "./dto/create-evidence-upload.dto.js";
 import type { VerifyEvidenceDto } from "./dto/verify-evidence.dto.js";
+import { ClamAvScanner } from "./clamav-scanner.js";
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(["application/pdf", "image/png", "image/jpeg", "text/plain", "text/csv"]);
 const UPLOAD_ROLES = [MembershipRole.OWNER, MembershipRole.ADMIN, MembershipRole.AI_GOVERNANCE, MembershipRole.AI_ENGINEER];
 const REVIEW_ROLES = [MembershipRole.OWNER, MembershipRole.ADMIN, MembershipRole.AI_GOVERNANCE, MembershipRole.SECURITY_ANALYST, MembershipRole.COMPLIANCE_OFFICER];
+
+function validateFileSignature(bytes: Buffer, contentType: string) {
+  const valid = contentType === "application/pdf" ? bytes.subarray(0, 5).toString("ascii") === "%PDF-"
+    : contentType === "image/png" ? bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+    : contentType === "image/jpeg" ? bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
+    : (contentType === "text/plain" || contentType === "text/csv") && !bytes.includes(0) && isUtf8(bytes);
+  if (!valid) throw new BadRequestException("File contents do not match the declared evidence type or contain invalid text encoding.");
+}
+
+function isUtf8(bytes: Buffer) {
+  try { new TextDecoder("utf-8", { fatal: true }).decode(bytes); return true; }
+  catch { return false; }
+}
 
 @Injectable()
 export class EvidenceStorageService {
@@ -109,10 +123,15 @@ export class EvidenceStorageService {
       throw new BadRequestException("Uploaded object size, checksum, or content type does not match the signed upload intent.");
     }
 
+    const bytes = await this.storage.readObject(evidence.storageKey, MAX_FILE_BYTES);
+    validateFileSignature(bytes, evidence.contentType);
+    const scan = await this.scanner.scan(bytes);
+    const nextStatus = scan.clean ? EvidenceFileStatus.UPLOADED : EvidenceFileStatus.QUARANTINED;
+
     return this.prisma.$transaction(async (tx) => {
       const changed = await tx.evidenceFile.updateMany({
         where: { id: evidenceId, organizationId: auth.organizationId, status: EvidenceFileStatus.PENDING_UPLOAD },
-        data: { status: EvidenceFileStatus.UPLOADED, uploadedAt: new Date() },
+        data: { status: nextStatus, uploadedAt: new Date() },
       });
       if (changed.count !== 1) throw new ConflictException("Evidence state changed; reload and try again.");
       const result = await tx.evidenceFile.findUniqueOrThrow({ where: { id: evidenceId } });
@@ -120,13 +139,15 @@ export class EvidenceStorageService {
         data: {
           organizationId: auth.organizationId,
           actorId: auth.sub,
-          action: "evidence.upload_complete",
+          action: scan.clean ? "evidence.malware_scan_clean" : "evidence.malware_quarantined",
           entityType: "EvidenceFile",
           entityId: evidenceId,
           metadata: {
             riskAssessmentId: assessmentId,
             sizeBytes: Number(result.sizeBytes),
             checksumSha256: result.checksumSha256,
+            scanner: "ClamAV",
+            ...(scan.clean ? {} : { signature: scan.signature }),
           },
         },
       });
