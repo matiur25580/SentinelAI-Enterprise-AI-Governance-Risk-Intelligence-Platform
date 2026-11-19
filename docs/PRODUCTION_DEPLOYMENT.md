@@ -1,0 +1,52 @@
+# Production Deployment Readiness
+
+This guide describes the minimum operational setup for the current SentinelAI foundation. Passing CI does not mean the product is production-ready or certified.
+
+## Current deployment shape
+- **Web:** Next.js 15 (`apps/web`), build with `pnpm --filter @sentinelai/web build`, run with `pnpm --filter @sentinelai/web start`.
+- **API:** NestJS (`apps/api`), build with `pnpm --filter @sentinelai/api build`, run with `pnpm --filter @sentinelai/api start`.
+- **Database:** PostgreSQL 16+, managed or self-hosted. Prisma migrations live in `apps/api/prisma/migrations`.
+- **AI engine:** FastAPI starter. It currently exposes health metadata only; it is not an authenticated inference service.
+- Redis is present in local Compose for future background work but is not currently required by the API.
+
+There is no checked-in production deployment manifest or container image definition. Choose a hosting platform and provision the web, API, and database as separate services; do not treat the development Compose file as a production deployment.
+
+## Required production environment
+Configure these values in the hosting provider secret/environment manager. Never commit real values.
+
+| Variable | Requirement |
+|---|---|
+| `NODE_ENV` | `production` |
+| `API_PORT` | Platform-assigned port or an integer from 1–65535 |
+| `DATABASE_URL` | PostgreSQL connection URL; use TLS and least-privilege database credentials |
+| `JWT_ACCESS_SECRET` | Unique cryptographically random secret, at least 32 characters |
+| `JWT_REFRESH_SECRET` | Different unique cryptographically random secret, at least 32 characters |
+| `WEB_ORIGIN` | Explicit comma-separated HTTPS origin(s), no paths |
+| `TRUST_PROXY_HOPS` | Set only behind a known proxy; exact positive hop count |
+
+Use a secret manager to generate independent JWT secrets (at least 32 random bytes each). Do not reuse development or CI secrets. Restrict who can read or rotate production secrets.
+
+## Release procedure
+1. Provision PostgreSQL with automated backups, point-in-time recovery, TLS, network restrictions, and a dedicated application role.
+2. Configure required environment variables on the API service and the public web origin on the web service.
+3. Build from the exact reviewed commit using Node.js 22 and pnpm 9.15.4: `pnpm install --frozen-lockfile`, `pnpm db:generate`, then `pnpm build`.
+4. Before shifting traffic, run migrations once as a release step using the production `DATABASE_URL`: `pnpm db:deploy`. Do not run `prisma migrate dev` in production or concurrently from every API replica.
+5. Start API and web services. Configure the platform health check to use `/api/v1/health/ready` for the API.
+6. Verify the web UI, API readiness, authentication flows, CORS from the configured web origin, rate-limit behavior, and database connectivity.
+7. Confirm backups and restore procedures, monitoring, log redaction, alert routing, and a rollback plan before enabling customer traffic.
+
+## Health checks
+- `GET /api/v1/health` is a liveness endpoint and does not prove the database is available.
+- `GET /api/v1/health/ready` checks PostgreSQL connectivity and returns HTTP 503 when the database is unavailable.
+- The AI engine `GET /health` is metadata-only; do not expose it as a customer-facing inference endpoint.
+
+## Go-live blockers and limitations
+The repository remains early development. Before using it as a production identity/governance product, complete and independently verify at least:
+- Email verification, password recovery, account lifecycle and administrator bootstrap controls.
+- Cross-tenant authorization tests for every protected module, not only authentication integration tests.
+- Secure headers, TLS enforcement, CSRF protections if cookie authentication is introduced, and production CORS review.
+- Centralized structured logs with secret/PII redaction, metrics, tracing, alerting, and incident response ownership.
+- Database backup restoration drills, migration rollback/forward-fix procedures, and capacity/load testing.
+- Production security assessment and review of the AI engine future authorization, quotas, isolation, and audit context.
+
+Do not advertise regulatory compliance or certification based solely on this software or its framework mappings.
