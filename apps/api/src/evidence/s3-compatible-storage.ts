@@ -12,9 +12,7 @@ function sha256(value: string) {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
 
-function hmac(key: Buffer | string, value: string, encoding?: "hex") {
-  return createHmac("sha256", key).update(value, "utf8").digest(encoding);
-}
+function signature(key: Buffer, value: string) {\n  return createHmac("sha256", key).update(value, "utf8").digest("hex");\n}
 
 @Injectable()
 export class S3CompatibleStorage {
