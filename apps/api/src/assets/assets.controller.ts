@@ -29,14 +29,14 @@ export class AssetsController {
   @Patch(":id")
   update(
     @CurrentUser() user: AuthenticatedUser,
-    @Param("id", new ParseStringPipe()) id: string,
+    @Param("id") id: string,
     @Body() dto: UpdateAssetDto,
   ) {
     return this.assetsService.update(user, id, dto);
   }
 
   @Delete(":id")
-  remove(@CurrentUser() user: AuthenticatedUser, @Param("id", new ParseStringPipe()) id: string) {
+  remove(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
     return this.assetsService.remove(user, id);
   }
 }
