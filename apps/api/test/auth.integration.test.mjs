@@ -117,6 +117,59 @@ test("register, login, refresh rotation, and logout work against PostgreSQL", { 
     assert.equal(secondaryProfile.data.organization.name, "SentinelAI Secondary Workspace");
     assert.notEqual(secondaryProfile.data.organization.id, profile.data.organization.id);
 
+    const createdAsset = await request("/assets", {
+      method: "POST",
+      token: register.data.accessToken,
+      body: {
+        name: "Customer Support LLM",
+        description: "Primary workspace model inventory entry",
+        assetType: "LLM_APPLICATION",
+        provider: "SentinelAI",
+        modelIdentifier: "support-assistant",
+        version: "1.0.0",
+      },
+    });
+    assert.equal(createdAsset.response.status, 201, JSON.stringify(createdAsset.data));
+    assert.equal(createdAsset.data.organizationId, profile.data.organization.id);
+    assert.equal(createdAsset.data.name, "Customer Support LLM");
+
+    const primaryAssetList = await request("/assets", { token: register.data.accessToken });
+    assert.equal(primaryAssetList.response.status, 200);
+    assert.ok(primaryAssetList.data.some((asset) => asset.id === createdAsset.data.id));
+
+    const secondaryAssetList = await request("/assets", { token: secondaryLogin.data.accessToken });
+    assert.equal(secondaryAssetList.response.status, 200);
+    assert.equal(secondaryAssetList.data.length, 0, "A workspace must not list another workspace's assets.");
+
+    const crossWorkspaceRead = await request(`/assets/${createdAsset.data.id}`, { token: secondaryLogin.data.accessToken });
+    assert.equal(crossWorkspaceRead.response.status, 404, "Cross-workspace asset reads must not disclose asset existence.");
+
+    const crossWorkspaceUpdate = await request(`/assets/${createdAsset.data.id}`, {
+      method: "PATCH",
+      token: secondaryLogin.data.accessToken,
+      body: { name: "Unauthorized overwrite" },
+    });
+    assert.equal(crossWorkspaceUpdate.response.status, 404, "Cross-workspace asset updates must be denied.");
+
+    const updatedAsset = await request(`/assets/${createdAsset.data.id}`, {
+      method: "PATCH",
+      token: register.data.accessToken,
+      body: { name: "Customer Support LLM v2", status: "IN_REVIEW" },
+    });
+    assert.equal(updatedAsset.response.status, 200, JSON.stringify(updatedAsset.data));
+    assert.equal(updatedAsset.data.name, "Customer Support LLM v2");
+    assert.equal(updatedAsset.data.status, "IN_REVIEW");
+
+    const deletedAsset = await request(`/assets/${createdAsset.data.id}`, {
+      method: "DELETE",
+      token: register.data.accessToken,
+    });
+    assert.equal(deletedAsset.response.status, 200, JSON.stringify(deletedAsset.data));
+    assert.equal(deletedAsset.data.success, true);
+
+    const deletedAssetRead = await request(`/assets/${createdAsset.data.id}`, { token: register.data.accessToken });
+    assert.equal(deletedAssetRead.response.status, 404);
+
     await database.query('UPDATE "Membership" SET "isActive" = false, "updatedAt" = NOW() WHERE "id" = $1', [secondMembershipId]);
     const inactiveMembershipProfile = await request("/auth/me", { token: secondaryLogin.data.accessToken });
     assert.equal(inactiveMembershipProfile.response.status, 401, "A token tied to an inactive workspace membership must be rejected.");
