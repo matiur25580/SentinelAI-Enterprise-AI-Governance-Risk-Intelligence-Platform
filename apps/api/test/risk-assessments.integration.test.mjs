@@ -181,6 +181,46 @@ test("risk assessment scoring, tenant isolation, submission, independent approva
   assert.equal(audit.response.status, 200);
   assert.equal(audit.data.pagination.total, 1);
   assert.equal(audit.data.data[0].entityId, created.data.id);
+
+  // The per-organization hash chain must verify after real workflow events.
+  const integrity = await request("/audit-logs/integrity", { token: ownerToken });
+  assert.equal(integrity.response.status, 200, JSON.stringify(integrity.data));
+  assert.equal(integrity.data.verified, true, JSON.stringify(integrity.data));
+  assert.ok(integrity.data.recordsChecked >= 1);
+  assert.equal(integrity.data.algorithm, "SHA-256");
+
+  // The database must reject direct mutation and deletion of append-only events.
+  const integrityDatabase = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await assert.rejects(
+      integrityDatabase.query(
+        'UPDATE "AuditLog" SET "action" = \'tampered.action\' WHERE "id" = $1',
+        [audit.data.data[0].id],
+      ),
+      (error) => error.code === "55000",
+    );
+    await assert.rejects(
+      integrityDatabase.query(
+        'DELETE FROM "AuditLog" WHERE "id" = $1',
+        [audit.data.data[0].id],
+      ),
+      (error) => error.code === "55000",
+    );
+  } finally {
+    await integrityDatabase.end();
+  }
+
+  const integrityAfterRejectedMutation = await request("/audit-logs/integrity", { token: ownerToken });
+  assert.equal(integrityAfterRejectedMutation.response.status, 200);
+  assert.equal(integrityAfterRejectedMutation.data.verified, true);
+
+  // Integrity verification is organization-scoped; a different tenant sees only its empty chain.
+  const outsiderIntegrity = await request("/audit-logs/integrity", {
+    token: reviewerRegistration.data.accessToken,
+  });
+  assert.equal(outsiderIntegrity.response.status, 200);
+  assert.equal(outsiderIntegrity.data.verified, true);
+  assert.equal(outsiderIntegrity.data.recordsChecked, 0);
 });
 
 after(async () => {
