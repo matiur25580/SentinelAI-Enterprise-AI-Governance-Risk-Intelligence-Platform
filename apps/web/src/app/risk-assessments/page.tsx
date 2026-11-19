@@ -12,7 +12,7 @@ type Assessment = {
   createdByMembership?: { user: { name: string } }; reviewedByMembership?: { user: { name: string } } | null;
 };
 type Profile = { user: { name: string }; organization: { name: string }; role: string };
-type EvidenceFile = { id: string; originalFileName: string; contentType: string; sizeBytes: string; checksumSha256: string; status: "PENDING_UPLOAD" | "UPLOADED" | "QUARANTINED" | "VERIFIED" | "REJECTED"; createdAt: string; uploadedAt?: string | null; verifiedAt?: string | null; verificationNote?: string | null; createdByMembership?: { user: { name: string } }; verifiedByMembership?: { user: { name: string } } | null };
+type EvidenceFile = { id: string; originalFileName: string; contentType: string; sizeBytes: string; checksumSha256: string; status: "PENDING_UPLOAD" | "UPLOADED" | "QUARANTINED" | "PURGED" | "VERIFIED" | "REJECTED"; createdAt: string; uploadedAt?: string | null; verifiedAt?: string | null; verificationNote?: string | null; createdByMembership?: { user: { name: string } }; verifiedByMembership?: { user: { name: string } } | null };
 type FormState = { assetId: string; title: string; scope: string; intendedUse: string; dataSensitivity: number; autonomyLevel: number; impact: number; likelihood: number; exposure: number; mitigationCoverage: number; evidenceText: string };
 const API = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1").replace(/\/$/, "");
 const initialForm: FormState = { assetId: "", title: "", scope: "", intendedUse: "", dataSensitivity: 3, autonomyLevel: 2, impact: 3, likelihood: 3, exposure: 3, mitigationCoverage: 0, evidenceText: "" };
@@ -39,6 +39,8 @@ export default function RiskAssessmentsPage() {
   const [evidenceBusy, setEvidenceBusy] = useState(false);
   const [evidenceDecision, setEvidenceDecision] = useState<{ id: string; decision: "VERIFIED" | "REJECTED" } | null>(null);
   const [evidenceNote, setEvidenceNote] = useState("");
+  const [purgeTarget, setPurgeTarget] = useState<string | null>(null);
+  const [purgeReason, setPurgeReason] = useState("");
 
   const api = useCallback(async (path: string, options: RequestInit = {}) => {
     const response = await fetch(API + path, { ...options, headers: { "content-type": "application/json", ...(token ? { authorization: "Bearer " + token } : {}), ...options.headers } });
@@ -129,6 +131,29 @@ export default function RiskAssessmentsPage() {
     } catch (err) { setError(err instanceof Error ? err.message : "Unable to issue private download link."); }
   }
 
+  async function rescanEvidence(id: string) {
+    if (!detail) return;
+    setEvidenceBusy(true); setError(""); setMessage("");
+    try {
+      const result = await api("/risk-assessments/" + detail.id + "/evidence/" + id + "/rescan", { method: "POST" });
+      setEvidenceFiles(await api("/risk-assessments/" + detail.id + "/evidence"));
+      setMessage(result.scan === "CLEAN" ? "A fresh ClamAV scan passed. Evidence is available for independent human review." : "Malware is still detected. Evidence remains quarantined.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Evidence rescan failed."); }
+    finally { setEvidenceBusy(false); }
+  }
+
+  async function purgeEvidence(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (!detail || !purgeTarget) return;
+    setEvidenceBusy(true); setError(""); setMessage("");
+    try {
+      await api("/risk-assessments/" + detail.id + "/evidence/" + purgeTarget + "/purge", { method: "POST", body: JSON.stringify({ reason: purgeReason }) });
+      setEvidenceFiles(await api("/risk-assessments/" + detail.id + "/evidence"));
+      setPurgeTarget(null); setPurgeReason("");
+      setMessage("Quarantined object securely deleted. Its metadata and purge rationale remain in the audit trail.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Evidence purge failed."); }
+    finally { setEvidenceBusy(false); }
+  }
+
   async function decideEvidence(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!detail || !evidenceDecision) return;
     setEvidenceBusy(true); setError("");
@@ -200,7 +225,8 @@ export default function RiskAssessmentsPage() {
       {detail.reviewRationale && <div className="risk-detail-section"><h3>Reviewer rationale</h3><p>{detail.reviewRationale}</p></div>}
       <div className="risk-detail-section"><h3>Private evidence files ({evidenceFiles.length})</h3><p>Uploads are checksum-checked; independent human review is required.</p>
         <label className="risk-evidence-upload">＋ Upload evidence file<input type="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.csv,application/pdf,image/png,image/jpeg,text/plain,text/csv" disabled={evidenceBusy} onChange={uploadEvidence} /></label>
-        {evidenceFiles.length > 0 ? <div className="risk-evidence-files">{evidenceFiles.map(file => <article key={file.id}><div><strong>{file.originalFileName}</strong><small>{file.contentType} · {(Number(file.sizeBytes)/1024).toFixed(1)} KB · SHA-256 {file.checksumSha256.slice(0,12)}…</small><span className={"risk-status " + file.status.toLowerCase()}>{file.status.replaceAll("_"," ")}</span>{file.verificationNote && <p>{file.verificationNote}</p>}<small>Uploaded by {file.createdByMembership?.user.name || "—"}{file.verifiedByMembership ? " · reviewed by " + file.verifiedByMembership.user.name : ""}</small></div><div className="risk-actions">{(file.status === "UPLOADED" || file.status === "VERIFIED") && <button onClick={() => downloadEvidence(file.id)}>Download</button>}{file.status === "UPLOADED" && ["OWNER","ADMIN","AI_GOVERNANCE","SECURITY_ANALYST","COMPLIANCE_OFFICER"].includes(profile?.role || "") && <><button onClick={() => { setEvidenceDecision({id:file.id,decision:"VERIFIED"}); setEvidenceNote(""); }}>Verify</button><button className="reject" onClick={() => { setEvidenceDecision({id:file.id,decision:"REJECTED"}); setEvidenceNote(""); }}>Reject</button></>}</div></article>)}</div> : <p>No private evidence files uploaded.</p>}
+        {evidenceFiles.length > 0 ? <div className="risk-evidence-files">{evidenceFiles.map(file => <article key={file.id}><div><strong>{file.originalFileName}</strong><small>{file.contentType} · {(Number(file.sizeBytes)/1024).toFixed(1)} KB · SHA-256 {file.checksumSha256.slice(0,12)}…</small><span className={"risk-status " + file.status.toLowerCase()}>{file.status.replaceAll("_"," ")}</span>{file.verificationNote && <p>{file.verificationNote}</p>}<small>Uploaded by {file.createdByMembership?.user.name || "—"}{file.verifiedByMembership ? " · reviewed by " + file.verifiedByMembership.user.name : ""}</small></div><div className="risk-actions">{(file.status === "UPLOADED" || file.status === "VERIFIED") && <button onClick={() => downloadEvidence(file.id)}>Download</button>}{file.status === "UPLOADED" && ["OWNER","ADMIN","AI_GOVERNANCE","SECURITY_ANALYST","COMPLIANCE_OFFICER"].includes(profile?.role || "") && <><button onClick={() => { setEvidenceDecision({id:file.id,decision:"VERIFIED"}); setEvidenceNote(""); }}>Verify</button><button className="reject" onClick={() => { setEvidenceDecision({id:file.id,decision:"REJECTED"}); setEvidenceNote(""); }}>Reject</button></>}{file.status === "QUARANTINED" && ["OWNER","ADMIN","AI_GOVERNANCE","SECURITY_ANALYST","COMPLIANCE_OFFICER"].includes(profile?.role || "") && <><button disabled={evidenceBusy} onClick={() => rescanEvidence(file.id)}>Rescan</button>{["OWNER","ADMIN","SECURITY_ANALYST"].includes(profile?.role || "") && <button className="reject" disabled={evidenceBusy} onClick={() => { setPurgeTarget(file.id); setPurgeReason(""); }}>Purge</button>}</>}</div></article>)}</div> : <p>No private evidence files uploaded.</p>}
+        {purgeTarget && <form className="risk-evidence-review" onSubmit={purgeEvidence}><label className="risk-field">Permanent deletion reason<textarea required minLength={10} maxLength={1000} rows={3} value={purgeReason} onChange={e => setPurgeReason(e.target.value)} placeholder="Record the incident/ticket, authorization, and reason for deleting the quarantined object…" /></label><div className="risk-modal-actions"><button type="button" className="risk-secondary" onClick={() => { setPurgeTarget(null); setPurgeReason(""); }}>Cancel</button><button className="risk-primary reject" disabled={evidenceBusy || purgeReason.trim().length < 10}>{evidenceBusy ? "Deleting…" : "Confirm permanent purge"}</button></div></form>}
         {evidenceDecision && <form className="risk-evidence-review" onSubmit={decideEvidence}><label className="risk-field">Verification rationale<textarea required minLength={10} maxLength={3000} rows={3} value={evidenceNote} onChange={e => setEvidenceNote(e.target.value)} placeholder="Record provenance, relevance, integrity, and review findings…" /></label><div className="risk-modal-actions"><button type="button" className="risk-secondary" onClick={() => setEvidenceDecision(null)}>Cancel</button><button className="risk-primary" disabled={evidenceBusy || evidenceNote.trim().length < 10}>{evidenceBusy ? "Saving…" : "Confirm " + evidenceDecision.decision.toLowerCase()}</button></div></form>}
       </div>
       <div className="risk-detail-meta"><span>Scoring version <strong>{detail.scoringVersion}</strong></span><span>Created by <strong>{detail.createdByMembership?.user.name || "—"}</strong></span><span>Reviewed by <strong>{detail.reviewedByMembership?.user.name || "—"}</strong></span></div>
