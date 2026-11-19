@@ -6,6 +6,7 @@ import { AuthController } from "./auth/auth.controller.js";
 import { AssetsModule } from "./assets/assets.module.js";
 import { AuditLogsModule } from "./audit-logs/audit-logs.module.js";
 import { HealthController } from "./health.controller.js";
+import { MetricsController } from "./observability/metrics.controller.js";
 import { PrismaModule } from "./prisma/prisma.module.js";
 import { AuthRateLimitMiddleware } from "./security/auth-rate-limit.middleware.js";
 
@@ -21,7 +22,7 @@ import { AuthRateLimitMiddleware } from "./security/auth-rate-limit.middleware.j
     AssetsModule,
     AuditLogsModule,
   ],
-  controllers: [HealthController],
+  controllers: [HealthController, MetricsController],
   providers: [AuthRateLimitMiddleware],
 })
 export class AppModule implements NestModule {
