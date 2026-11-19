@@ -1,5 +1,4 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { AssetStatus } from "../generated/prisma/client.js";
 import type { AuthenticatedUser } from "../auth/interfaces/authenticated-user.interface.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import type { CreateAssetDto } from "./dto/create-asset.dto.js";
