@@ -74,6 +74,13 @@ export default function RiskAssessmentsPage() {
   useEffect(() => {
     if (!token) return;
     let active = true;
+    loadSessions().catch((err: Error) => { if (active) setError(err.message); });
+    return () => { active = false; };
+  }, [token, loadSessions]);
+
+  useEffect(() => {
+    if (!token) return;
+    let active = true;
     load().catch((err: Error) => { if (active) setError(err.message); });
     return () => { active = false; };
   }, [token, load]);
