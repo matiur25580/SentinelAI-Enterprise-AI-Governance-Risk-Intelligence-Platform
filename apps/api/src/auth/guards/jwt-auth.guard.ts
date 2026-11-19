@@ -30,7 +30,7 @@ export class JwtAuthGuard implements CanActivate {
       const payload = await this.jwtService.verifyAsync<AuthenticatedUser>(token, {
         secret: process.env.JWT_ACCESS_SECRET,
       });
-      if (!payload.sub || !payload.organizationId || !payload.membershipId) {
+      if (!payload.sub || !payload.organizationId || !payload.membershipId || !payload.sessionId) {
         throw new UnauthorizedException();
       }
 
@@ -40,6 +40,13 @@ export class JwtAuthGuard implements CanActivate {
           userId: payload.sub,
           organizationId: payload.organizationId,
           isActive: true,
+          refreshTokens: {
+            some: {
+              familyId: payload.sessionId,
+              revokedAt: null,
+              expiresAt: { gt: new Date() },
+            },
+          },
           user: { isActive: true },
           organization: { isActive: true },
         },

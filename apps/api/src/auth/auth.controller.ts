@@ -1,8 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Post,
+  Param,
   UseGuards,
 } from "@nestjs/common";
 import { AuthService } from "./auth.service.js";
@@ -35,6 +37,21 @@ export class AuthController {
   @Post("logout")
   logout(@Body() dto: RefreshDto) {
     return this.authService.logout(dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get("sessions")
+  sessions(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.listSessions(user);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete("sessions/:familyId")
+  revokeSession(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("familyId") familyId: string,
+  ) {
+    return this.authService.revokeSession(user, familyId);
   }
 
   @UseGuards(JwtAuthGuard)

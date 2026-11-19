@@ -146,6 +146,13 @@ test("register, login, refresh rotation, and logout work against PostgreSQL", { 
     assert.equal(secondaryProfile.data.organization.id, secondOrganizationId);
     assert.equal(secondaryProfile.data.organization.name, "SentinelAI Secondary Workspace");
     assert.notEqual(secondaryProfile.data.organization.id, profile.data.organization.id);
+    const primarySessionPayload = JSON.parse(Buffer.from(register.data.refreshToken.split(".")[1], "base64url").toString("utf8"));
+    const crossWorkspaceSessionRevoke = await request("/auth/sessions/" + primarySessionPayload.familyId, {
+      method: "DELETE",
+      token: secondaryLogin.data.accessToken,
+    });
+    assert.equal(crossWorkspaceSessionRevoke.response.status, 404, "A workspace must not revoke another workspace session.");
+    assert.equal((await request("/auth/me", { token: register.data.accessToken })).response.status, 200);
     // Use an authorized role so the cross-tenant update test reaches the
     // tenant-scoped service and verifies its 404 non-disclosure behavior.
     await database.query(
@@ -356,6 +363,25 @@ test("register, login, refresh rotation, and logout work against PostgreSQL", { 
     body: { email, password: "Wrong-Password-2026!" },
   });
   assert.equal(invalidLogin.response.status, 401);
+
+  const sessionLogin = await request("/auth/login", { method: "POST", body: { email, password } });
+  assert.equal(sessionLogin.response.status, 201, JSON.stringify(sessionLogin.data));
+  const sessionPayload = JSON.parse(Buffer.from(sessionLogin.data.refreshToken.split(".")[1], "base64url").toString("utf8"));
+  const sessions = await request("/auth/sessions", { token: sessionLogin.data.accessToken });
+  assert.equal(sessions.response.status, 200, JSON.stringify(sessions.data));
+  assert.ok(sessions.data.data.some((session) => session.sessionId === sessionPayload.familyId));
+  const malformedSessionId = await request("/auth/sessions/not-a-session-id", { method: "DELETE", token: sessionLogin.data.accessToken });
+  assert.equal(malformedSessionId.response.status, 400);
+  const revokedSession = await request("/auth/sessions/" + sessionPayload.familyId, { method: "DELETE", token: sessionLogin.data.accessToken });
+  assert.equal(revokedSession.response.status, 200, JSON.stringify(revokedSession.data));
+  assert.ok(revokedSession.data.revokedTokenCount >= 1);
+  const revokedSessionRefresh = await request("/auth/refresh", { method: "POST", body: { refreshToken: sessionLogin.data.refreshToken } });
+  assert.equal(revokedSessionRefresh.response.status, 401, "Revoking a session must invalidate its refresh token family.");
+  const revokedSessionAccess = await request("/auth/me", { token: sessionLogin.data.accessToken });
+  assert.equal(revokedSessionAccess.response.status, 401, "Revoking a session must invalidate its access token immediately.");
+  const revokedSessionAudit = await request("/audit-logs?action=auth.session.revoke", { token: register.data.accessToken });
+  assert.equal(revokedSessionAudit.response.status, 200);
+  assert.ok(revokedSessionAudit.data.data.some((entry) => entry.entityId === sessionPayload.familyId));
 
   const login = await request("/auth/login", {
     method: "POST",
