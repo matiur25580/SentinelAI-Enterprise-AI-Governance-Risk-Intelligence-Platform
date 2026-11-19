@@ -53,6 +53,8 @@ jobs:
         run: pnpm build
       - name: Run authentication integration tests
         run: pnpm --filter @sentinelai/api test:integration
+      - name: Test production deployment smoke checks
+        run: node --test scripts/production-smoke-check.test.mjs
       - name: Check required foundation files
         run: |
           test -f README.md
