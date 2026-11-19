@@ -121,4 +121,19 @@ export class S3CompatibleStorage {
     const contentType = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
     return { sizeBytes, checksumSha256: checksum, contentType };
   }
+  async readObject(key: string, maxBytes: number) {
+    const signed = this.presign("GET", key, 120);
+    const response = await fetch(signed.url, { signal: AbortSignal.timeout(15_000) });
+    if (!response.ok) throw new ServiceUnavailableException("Evidence object could not be retrieved for malware scanning.");
+    const declaredLength = Number(response.headers.get("content-length"));
+    if (!Number.isSafeInteger(declaredLength) || declaredLength < 1 || declaredLength > maxBytes) {
+      throw new ServiceUnavailableException("Evidence object size is invalid for malware scanning.");
+    }
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length !== declaredLength || bytes.length > maxBytes) {
+      throw new ServiceUnavailableException("Evidence object length changed during malware scanning.");
+    }
+    return bytes;
+  }
+
 }
