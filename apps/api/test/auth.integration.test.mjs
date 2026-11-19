@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import pg from "pg";
 
@@ -94,6 +95,93 @@ after(async () => {
         resolve();
       });
     });
+  }
+});
+
+test("email verification and password reset tokens are single-use and reset revokes every active session", { timeout: 60_000 }, async () => {
+  const email = `account-lifecycle-${Date.now()}@example.test`;
+  const initialPassword = "Initial-Account-Password-2026!";
+  const nextPassword = "Updated-Account-Password-2026!";
+  const registration = await request("/auth/register", {
+    method: "POST",
+    body: {
+      name: "Account Lifecycle User",
+      email,
+      password: initialPassword,
+      organizationName: "Account Lifecycle Workspace",
+    },
+  });
+  assert.equal(registration.response.status, 201, JSON.stringify(registration.data));
+  assert.ok(registration.data.accessToken);
+
+  const database = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    const user = await database.query('SELECT "id" FROM "User" WHERE "email" = $1', [email]);
+    assert.equal(user.rowCount, 1);
+    const userId = user.rows[0].id;
+
+    const verificationToken = `${randomUUID()}-${randomUUID()}`;
+    await database.query(
+      'INSERT INTO "AccountActionToken" ("id", "userId", "purpose", "tokenHash", "expiresAt", "createdAt") VALUES ($1, $2, \'EMAIL_VERIFICATION\', $3, NOW() + INTERVAL \'1 hour\', NOW())',
+      [randomUUID(), userId, createHash("sha256").update(verificationToken).digest("hex")],
+    );
+    const verified = await request("/auth/email/verification/confirm", {
+      method: "POST",
+      body: { token: verificationToken },
+    });
+    assert.equal(verified.response.status, 201, JSON.stringify(verified.data));
+    assert.equal(verified.data.success, true);
+
+    const reusedVerification = await request("/auth/email/verification/confirm", {
+      method: "POST",
+      body: { token: verificationToken },
+    });
+    assert.equal(reusedVerification.response.status, 401, "An email verification token must be single-use.");
+
+    const expiredToken = `${randomUUID()}-${randomUUID()}`;
+    await database.query(
+      'INSERT INTO "AccountActionToken" ("id", "userId", "purpose", "tokenHash", "expiresAt", "createdAt") VALUES ($1, $2, \'PASSWORD_RESET\', $3, NOW() - INTERVAL \'1 minute\', NOW())',
+      [randomUUID(), userId, createHash("sha256").update(expiredToken).digest("hex")],
+    );
+    const expiredReset = await request("/auth/password/reset", {
+      method: "POST",
+      body: { token: expiredToken, password: nextPassword },
+    });
+    assert.equal(expiredReset.response.status, 401, "Expired password reset tokens must be rejected.");
+
+    const resetToken = `${randomUUID()}-${randomUUID()}`;
+    await database.query(
+      'INSERT INTO "AccountActionToken" ("id", "userId", "purpose", "tokenHash", "expiresAt", "createdAt") VALUES ($1, $2, \'PASSWORD_RESET\', $3, NOW() + INTERVAL \'30 minutes\', NOW())',
+      [randomUUID(), userId, createHash("sha256").update(resetToken).digest("hex")],
+    );
+    const reset = await request("/auth/password/reset", {
+      method: "POST",
+      body: { token: resetToken, password: nextPassword },
+    });
+    assert.equal(reset.response.status, 201, JSON.stringify(reset.data));
+    assert.equal(reset.data.success, true);
+
+    const oldAccess = await request("/auth/me", { token: registration.data.accessToken });
+    assert.equal(oldAccess.response.status, 401, "Password reset must immediately revoke active access sessions.");
+    const reusedReset = await request("/auth/password/reset", {
+      method: "POST",
+      body: { token: resetToken, password: initialPassword },
+    });
+    assert.equal(reusedReset.response.status, 401, "A password reset token must be single-use.");
+
+    const newPasswordLogin = await request("/auth/login", {
+      method: "POST",
+      body: { email, password: nextPassword },
+    });
+    assert.equal(newPasswordLogin.response.status, 201, JSON.stringify(newPasswordLogin.data));
+    assert.ok(newPasswordLogin.data.accessToken);
+    const oldPasswordLogin = await request("/auth/login", {
+      method: "POST",
+      body: { email, password: initialPassword },
+    });
+    assert.equal(oldPasswordLogin.response.status, 401, "The previous password must no longer authenticate.");
+  } finally {
+    await database.end();
   }
 });
 
