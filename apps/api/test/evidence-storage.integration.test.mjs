@@ -374,8 +374,8 @@ nodeTest("private evidence upload, checksum validation, tenant isolation, and in
 
   const audit = await request("/audit-logs?action=evidence.verify", { token: ownerToken });
   assert.equal(audit.response.status, 200);
-  assert.equal(audit.data.pagination.total, 1);
-  assert.equal(audit.data.data[0].entityId, intent.data.evidence.id);
+  assert.equal(audit.data.pagination.total, 2);
+  assert.deepEqual(new Set(audit.data.data.map(entry => entry.entityId)), new Set([intent.data.evidence.id, infectedIntent.data.evidence.id]));
 });
 
 after(async () => {
