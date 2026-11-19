@@ -51,4 +51,11 @@ docker run --rm --pull=missing \
   prom/alertmanager:v0.28.1 \
   check-config /etc/alertmanager/alertmanager.yml
 
+echo "Validating local monitoring Compose overlay..."
+GRAFANA_ADMIN_PASSWORD=ci-only-placeholder-password \
+  docker compose \
+    -f "$repo_root/docker-compose.yml" \
+    -f "$repo_root/ops/local-monitoring/compose.monitoring.yml" \
+    config --quiet
+
 echo "Monitoring configuration validation passed."
