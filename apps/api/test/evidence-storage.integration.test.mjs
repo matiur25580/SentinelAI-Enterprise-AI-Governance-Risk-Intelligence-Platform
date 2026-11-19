@@ -16,6 +16,7 @@ let apiProcess;
 let apiOutput = "";
 let storageServer;
 let scannerServer;
+let scannerForceClean = false;
 
 async function resetAuthRateLimits() {
   const database = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -52,6 +53,7 @@ before(async () => {
 
   storageServer = createServer(async (req, res) => {
     const key = new URL(req.url || "/", `http://127.0.0.1:${storagePort}`).pathname;
+    if (req.method === "DELETE") { storageObjects.delete(key); res.writeHead(204).end(); return; }
     if (req.method === "PUT") {
       const chunks = [];
       for await (const chunk of req) chunks.push(chunk);
@@ -98,7 +100,7 @@ before(async () => {
         const length = buffer.readUInt32BE(0);
         if (length === 0) {
           const payload = Buffer.concat(chunks);
-          socket.end(payload.includes(Buffer.from("EICAR-STANDARD-ANTIVIRUS-TEST-FILE"))
+          socket.end(!scannerForceClean && payload.includes(Buffer.from("EICAR-STANDARD-ANTIVIRUS-TEST-FILE"))
             ? "stream: Eicar-Test-Signature FOUND\0"
             : "stream: OK\0");
           return;
@@ -322,6 +324,53 @@ nodeTest("private evidence upload, checksum validation, tenant isolation, and in
     body: { decision: "VERIFIED", note: "Attempt to verify a quarantined file." },
   });
   assert.equal(quarantinedDecision.response.status, 409);
+
+  const infectedRescan = await request(evidencePath + "/" + infectedIntent.data.evidence.id + "/rescan", {
+    method: "POST", token: reviewerLogin.data.accessToken,
+  });
+  assert.equal(infectedRescan.response.status, 201, JSON.stringify(infectedRescan.data));
+  assert.equal(infectedRescan.data.status, "QUARANTINED");
+  assert.equal(infectedRescan.data.scan, "INFECTED");
+
+  scannerForceClean = true;
+  const cleanRescan = await request(evidencePath + "/" + infectedIntent.data.evidence.id + "/rescan", {
+    method: "POST", token: reviewerLogin.data.accessToken,
+  });
+  assert.equal(cleanRescan.response.status, 201, JSON.stringify(cleanRescan.data));
+  assert.equal(cleanRescan.data.status, "UPLOADED");
+  assert.equal(cleanRescan.data.scan, "CLEAN");
+  scannerForceClean = false;
+
+  const reverified = await request(evidencePath + "/" + infectedIntent.data.evidence.id + "/decision", {
+    method: "POST", token: reviewerLogin.data.accessToken,
+    body: { decision: "VERIFIED", note: "Re-scanned clean after signature database update; reviewed independently." },
+  });
+  assert.equal(reverified.response.status, 201, JSON.stringify(reverified.data));
+  assert.equal(reverified.data.status, "VERIFIED");
+
+  const purgeIntent = await request(evidencePath + "/upload-intents", {
+    method: "POST", token: ownerToken,
+    body: { fileName: "purge-me.pdf", contentType: "application/pdf", sizeBytes: infectedBytes.length, checksumSha256: infectedChecksum },
+  });
+  assert.equal(purgeIntent.response.status, 201, JSON.stringify(purgeIntent.data));
+  const purgePut = await fetch(purgeIntent.data.upload.url, { method: "PUT", headers: purgeIntent.data.upload.headers, body: infectedBytes });
+  assert.equal(purgePut.status, 200);
+  const purgeComplete = await request(evidencePath + "/" + purgeIntent.data.evidence.id + "/complete", { method: "POST", token: ownerToken });
+  assert.equal(purgeComplete.response.status, 201, JSON.stringify(purgeComplete.data));
+  assert.equal(purgeComplete.data.status, "QUARANTINED");
+
+  const invalidPurge = await request(evidencePath + "/" + intent.data.evidence.id + "/purge", {
+    method: "POST", token: ownerToken, body: { reason: "Attempt to purge a clean verified file." },
+  });
+  assert.equal(invalidPurge.response.status, 409);
+  const purged = await request(evidencePath + "/" + purgeIntent.data.evidence.id + "/purge", {
+    method: "POST", token: ownerToken, body: { reason: "Confirmed malicious test artifact; remove bytes after recording the incident." },
+  });
+  assert.equal(purged.response.status, 201, JSON.stringify(purged.data));
+  assert.equal(purged.data.status, "PURGED");
+  assert.equal(storageObjects.size, 1); // Only the original verified clean evidence remains.
+  const purgedDownload = await request(evidencePath + "/" + purgeIntent.data.evidence.id + "/download", { method: "POST", token: ownerToken });
+  assert.equal(purgedDownload.response.status, 404);
 
   const audit = await request("/audit-logs?action=evidence.verify", { token: ownerToken });
   assert.equal(audit.response.status, 200);
