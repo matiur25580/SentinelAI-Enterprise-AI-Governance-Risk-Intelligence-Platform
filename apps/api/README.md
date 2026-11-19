@@ -56,7 +56,8 @@ The first migration creates organizations, users, memberships, refresh-token ses
 - Refresh tokens are stored only as Argon2id hashes and rotated on use.
 - JWT access and refresh secrets must be independent random values of at least 32 characters.
 - Registration assigns the creator the workspace OWNER role.
-- Email verification, rate limiting, account recovery, SSO, and invitation workflows are not implemented yet; do not expose this foundation as a production identity service until those controls and tests are completed.
+- Authentication endpoints use a PostgreSQL-backed, per-client-IP fixed-window limiter: registration (5), login (10), refresh (30), and logout (30) requests per 15-minute window. The IP-derived bucket key is hashed before storage; configure the exact trusted proxy hop count when deployed behind a reverse proxy.
+- Email verification, password recovery, SSO, invitation workflows, and administrator bootstrap are not implemented yet. Do not expose this foundation as a production identity service until the remaining account-lifecycle controls and tests are completed.
 
 
 ## AI incident management
