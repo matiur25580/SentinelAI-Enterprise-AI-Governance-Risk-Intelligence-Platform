@@ -195,6 +195,7 @@ model RiskAssessment {
   residualScore         Float
   inherentLevel         RiskLevel
   residualLevel         RiskLevel
+  scoringVersion        String               @default("sentinelai-risk-v1")
   evidence              Json
   status                RiskAssessmentStatus @default(DRAFT)
   reviewRationale       String?
