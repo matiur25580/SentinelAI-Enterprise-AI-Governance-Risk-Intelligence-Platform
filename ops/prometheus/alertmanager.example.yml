@@ -1,0 +1,20 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: operator-not-configured
+  group_by:
+    - alertname
+    - service
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  # Safe placeholder: alerts are accepted but intentionally not delivered.
+  # Replace this receiver with an approved email, chat, or paging integration
+  # and provision credentials via the deployment secret manager.
+  - name: operator-not-configured
+
+# Add inhibit_rules only after defining and testing the corresponding
+# severity and service labels in your operational policy.
