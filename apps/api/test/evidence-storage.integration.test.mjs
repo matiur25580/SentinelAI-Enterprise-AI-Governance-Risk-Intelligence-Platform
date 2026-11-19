@@ -372,6 +372,12 @@ nodeTest("private evidence upload, checksum validation, tenant isolation, and in
   const purgedDownload = await request(evidencePath + "/" + purgeIntent.data.evidence.id + "/download", { method: "POST", token: ownerToken });
   assert.equal(purgedDownload.response.status, 404);
 
+  const purgeAudit = await request("/audit-logs?action=evidence.quarantine_purged", { token: ownerToken });
+  assert.equal(purgeAudit.response.status, 200);
+  assert.equal(purgeAudit.data.pagination.total, 1);
+  assert.equal(purgeAudit.data.data[0].entityId, purgeIntent.data.evidence.id);
+  assert.equal(purgeAudit.data.data[0].metadata.reason, "Confirmed malicious test artifact; remove bytes after recording the incident.");
+
   const audit = await request("/audit-logs?action=evidence.verify", { token: ownerToken });
   assert.equal(audit.response.status, 200);
   assert.equal(audit.data.pagination.total, 2);
