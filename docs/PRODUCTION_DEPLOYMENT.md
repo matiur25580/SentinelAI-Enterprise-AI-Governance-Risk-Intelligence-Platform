@@ -23,6 +23,7 @@ Configure these values in the hosting provider secret/environment manager. Never
 | `JWT_REFRESH_SECRET` | Different unique cryptographically random secret, at least 32 characters |
 | `WEB_ORIGIN` | Explicit comma-separated HTTPS origin(s), no paths |
 | `TRUST_PROXY_HOPS` | Set only behind a known proxy; exact positive hop count |
+| `METRICS_BEARER_TOKEN` | Optional; at least 32 random characters. Configure only when a private Prometheus scraper is used; protect it as a secret |
 
 Use a secret manager to generate independent JWT secrets (at least 32 random bytes each). Do not reuse development or CI secrets. Restrict who can read or rotate production secrets.
 
@@ -39,6 +40,7 @@ Use a secret manager to generate independent JWT secrets (at least 32 random byt
 - `GET /api/v1/health` is a liveness endpoint and does not prove the database is available.
 - `GET /api/v1/health/ready` checks PostgreSQL connectivity and returns HTTP 503 when the database is unavailable.
 - API responses include a server-generated `X-Request-Id`; use it to correlate client-reported failures with request-completion logs. Request logs omit raw URLs, query strings, headers, bodies, IP addresses, and user identifiers.
+- Optional Prometheus scrape endpoint: `GET /api/v1/metrics`. Set `METRICS_BEARER_TOKEN` to a unique secret of at least 32 characters; the endpoint returns 404 when unset or invalid and requires `Authorization: Bearer ...`. Keep the endpoint private and do not expose the token to browsers. Metrics are process-local and reset on restart; aggregate replica data in an external Prometheus-compatible backend.
 - The AI engine `GET /health` is metadata-only; do not expose it as a customer-facing inference endpoint.
 
 ## Go-live blockers and limitations
