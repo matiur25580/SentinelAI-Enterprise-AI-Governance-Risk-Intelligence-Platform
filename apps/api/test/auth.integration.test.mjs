@@ -154,6 +154,12 @@ test("email verification and password reset tokens are single-use and reset revo
       'INSERT INTO "AccountActionToken" ("id", "userId", "purpose", "tokenHash", "expiresAt", "createdAt") VALUES ($1, $2, \'PASSWORD_RESET\', $3, NOW() + INTERVAL \'30 minutes\', NOW())',
       [randomUUID(), userId, createHash("sha256").update(resetToken).digest("hex")],
     );
+
+    const siblingResetToken = `${randomUUID()}-${randomUUID()}`;
+    await database.query(
+      'INSERT INTO "AccountActionToken" ("id", "userId", "purpose", "tokenHash", "expiresAt", "createdAt") VALUES ($1, $2, \'PASSWORD_RESET\', $3, NOW() + INTERVAL \'30 minutes\', NOW())',
+      [randomUUID(), userId, createHash("sha256").update(siblingResetToken).digest("hex")],
+    );
     const reset = await request("/auth/password/reset", {
       method: "POST",
       body: { token: resetToken, password: nextPassword },
@@ -168,6 +174,11 @@ test("email verification and password reset tokens are single-use and reset revo
       body: { token: resetToken, password: initialPassword },
     });
     assert.equal(reusedReset.response.status, 401, "A password reset token must be single-use.");
+    const invalidatedSibling = await request("/auth/password/reset", {
+      method: "POST",
+      body: { token: siblingResetToken, password: initialPassword },
+    });
+    assert.equal(invalidatedSibling.response.status, 401, "A successful reset must invalidate every other outstanding reset link.");
 
     const newPasswordLogin = await request("/auth/login", {
       method: "POST",
@@ -183,6 +194,22 @@ test("email verification and password reset tokens are single-use and reset revo
   } finally {
     await database.end();
   }
+});
+
+test("account lifecycle email requests use generic responses for unknown accounts", async () => {
+  const unknownEmail = `unknown-account-${Date.now()}@example.test`;
+  const verification = await request("/auth/email/verification/request", {
+    method: "POST",
+    body: { email: unknownEmail },
+  });
+  assert.equal(verification.response.status, 201);
+  assert.match(verification.data.message, /If the account is eligible/);
+  const reset = await request("/auth/password/forgot", {
+    method: "POST",
+    body: { email: unknownEmail },
+  });
+  assert.equal(reset.response.status, 201);
+  assert.equal(reset.data.message, verification.data.message);
 });
 
 test("register, login, refresh rotation, and logout work against PostgreSQL", { timeout: 120_000 }, async () => {
