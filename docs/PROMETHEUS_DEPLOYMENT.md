@@ -54,10 +54,19 @@ tokens in command-line arguments, Git, dashboard JSON, or scrape target URLs.
 5. Validate with `amtool check-config alertmanager.yml`, reload Alertmanager,
    and send a controlled test alert to verify end-to-end delivery.
 
-The placeholder receiver intentionally sends no notifications. Alert rules
-being visible in Prometheus does not prove that a human is being notified.
-Do not claim paging coverage until a real receiver has been configured and
-tested by an authorized operator.
+The placeholder receiver intentionally sends no notifications. For a generic
+HTTPS webhook integration, use
+`ops/prometheus/alertmanager.webhook.example.yml` as a starting point. Replace
+the example URL with an approved endpoint that accepts Alertmanager webhook
+payloads. If the endpoint requires authentication, configure the supported
+Alertmanager `http_config` authentication mechanism for the pinned version and
+mount credentials from the secret manager; never put tokens in Git or the URL.
+The generic webhook template is validated in CI but does not prove the endpoint
+exists or accepts deliveries.
+
+Alert rules being visible in Prometheus does not prove that a human is being
+notified. Do not claim paging coverage until a real receiver has been
+configured and tested by an authorized operator.
 
 ## 4. Connect Grafana
 
@@ -71,7 +80,7 @@ Grafana variables or dashboard JSON.
 
 Pull requests run `bash scripts/validate-monitoring-config.sh`. The script
 uses pinned Prometheus and Alertmanager container versions to validate the
-scrape configuration, alert rules, and Alertmanager configuration with
+scrape configuration, alert rules, and Alertmanager configurations (including the optional webhook receiver template) with
 `promtool` and `amtool`. The alert rules are mounted at the absolute path
 referenced by the Prometheus example, so CI validates the same file layout
 documented for deployment. It creates a temporary dummy token file solely for
