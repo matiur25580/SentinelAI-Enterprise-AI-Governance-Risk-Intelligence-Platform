@@ -36,6 +36,7 @@ export default function GovernanceReportsPanel({ api, downloadUrl, token }: { ap
   const [to, setTo] = useState("");
   const [busy, setBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [packageExporting, setPackageExporting] = useState(false);
   const [error, setError] = useState("");
 
   const params = () => {
@@ -77,10 +78,35 @@ export default function GovernanceReportsPanel({ api, downloadUrl, token }: { ap
     finally { setExporting(false); }
   }
 
+  async function exportAuditPackage() {
+    setPackageExporting(true); setError("");
+    try {
+      const query = params();
+      const response = await fetch(downloadUrl + "/governance/reports/export.zip" + (query.size ? "?" + query.toString() : ""), {
+        headers: { authorization: "Bearer " + token },
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.message || "Audit package export failed (" + response.status + ").");
+      }
+      const blob = await response.blob();
+      if (blob.size === 0) throw new Error("The audit package was empty. Please try again.");
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url; anchor.download = "sentinelai-governance-audit-package.zip";
+      document.body.appendChild(anchor); anchor.click(); anchor.remove();
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+    } catch (err) { setError(err instanceof Error ? err.message : "Audit package export failed."); }
+    finally { setPackageExporting(false); }
+  }
+
   return <section className="governance-report-panel" id="governance-reports">
     <div className="governance-report-heading">
       <div><div className="risk-kicker">EXECUTIVE / COMPLIANCE INTELLIGENCE</div><h2>Governance overview</h2><p>Organization-wide inventory, risk posture, incidents, evidence, and accountability activity.</p></div>
-      <button className="risk-primary" disabled={!report || exporting} onClick={exportCsv}>{exporting ? "Preparing…" : "↓ Export report CSV"}</button>
+      <div className="governance-report-actions">
+        <button className="session-refresh" disabled={!report || exporting || packageExporting} onClick={exportCsv}>{exporting ? "Preparing…" : "↓ Export report CSV"}</button>
+        <button className="risk-primary" disabled={!report || exporting || packageExporting} onClick={exportAuditPackage}>{packageExporting ? "Preparing package…" : "↓ Download audit package"}</button>
+      </div>
     </div>
     <div className="governance-report-filters">
       <label>From<input type="date" value={from} max={to || undefined} onChange={e => setFrom(e.target.value)} /></label>
@@ -110,6 +136,7 @@ export default function GovernanceReportsPanel({ api, downloadUrl, token }: { ap
         {report.audit.recentActivity.length ? <div className="governance-activity-list">{report.audit.recentActivity.map(event => <article key={event.id}><strong>{event.action}</strong><span>{event.entityType}{event.entityId ? " · " + event.entityId.slice(0, 12) : ""}</span><small>{event.actor?.name || event.actor?.email || "System / unknown actor"} · {new Date(event.createdAt).toLocaleString()}</small></article>)}</div> : <p className="governance-no-data">No audit activity in this period.</p>}
       </div>
       <p className="governance-report-caveat">{report.caveat} Generated {new Date(report.generatedAt).toLocaleString()}.</p>
+      <p className="governance-report-caveat">The ZIP package includes a PDF report, structured JSON, and CSV inventories. Evidence file contents, storage credentials, and signed download URLs are excluded.</p>
     </>}
     <ComplianceMappingPanel />
   </section>;
