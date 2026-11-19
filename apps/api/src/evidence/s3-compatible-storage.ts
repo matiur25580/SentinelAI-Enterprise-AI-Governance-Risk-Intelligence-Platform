@@ -79,8 +79,8 @@ export class S3CompatibleStorage {
     const canonicalHeaders = Object.keys(headers).sort().map(name => name + ":" + headers[name].trim() + "\n").join("");
     const canonicalRequest = [method, url.pathname, canonicalQuery, canonicalHeaders, signedHeaders, "UNSIGNED-PAYLOAD"].join("\n");
     const stringToSign = ["AWS4-HMAC-SHA256", amzDate, scope, sha256(canonicalRequest)].join("\n");
-    const signature = hmac(this.signingKey(secretKey, date, region), stringToSign, "hex");
-    url.search = canonicalQuery + "&X-Amz-Signature=" + signature;
+    const signatureValue = signature(this.signingKey(secretKey, date, region), stringToSign);
+    url.search = canonicalQuery + "&X-Amz-Signature=" + signatureValue;
     return {
       url: url.toString(),
       headers: method === "PUT" ? { "content-type": contentType!, "x-amz-checksum-sha256": checksumBase64! } : {},
@@ -106,8 +106,8 @@ export class S3CompatibleStorage {
     const canonicalRequest = ["HEAD", url.pathname, "", canonicalHeaders, signedHeaders, payloadHash].join("\n");
     const scope = date + "/" + region + "/s3/aws4_request";
     const stringToSign = ["AWS4-HMAC-SHA256", amzDate, scope, sha256(canonicalRequest)].join("\n");
-    const signature = hmac(this.signingKey(secretKey, date, region), stringToSign, "hex");
-    const authorization = "AWS4-HMAC-SHA256 Credential=" + accessKey + "/" + scope + ", SignedHeaders=" + signedHeaders + ", Signature=" + signature;
+    const signatureValue = signature(this.signingKey(secretKey, date, region), stringToSign);
+    const authorization = "AWS4-HMAC-SHA256 Credential=" + accessKey + "/" + scope + ", SignedHeaders=" + signedHeaders + ", Signature=" + signatureValue;
     const response = await fetch(url, {
       method: "HEAD",
       headers: { ...headers, authorization },
