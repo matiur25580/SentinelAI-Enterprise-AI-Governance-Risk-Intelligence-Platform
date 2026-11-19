@@ -415,6 +415,21 @@ nodeTest("private evidence upload, checksum validation, tenant isolation, and in
   assert.equal(storageObjects.size, 0);
   const finalEvidence = await request(evidencePath, { token: ownerToken });
   assert.equal(finalEvidence.data.find(file => file.id === intent.data.evidence.id).status, "PURGED");
+
+  const abandonedIntent = await request(evidencePath + "/upload-intents", {
+    method: "POST", token: ownerToken,
+    body: { fileName: "abandoned.pdf", contentType: "application/pdf", sizeBytes: fileBytes.length, checksumSha256: checksum },
+  });
+  assert.equal(abandonedIntent.response.status, 201, JSON.stringify(abandonedIntent.data));
+  const abandonedDatabase = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await abandonedDatabase.query('UPDATE "EvidenceFile" SET "uploadExpiresAt" = NOW() - INTERVAL \'25 hours\' WHERE id = $1', [abandonedIntent.data.evidence.id]);
+  } finally { await abandonedDatabase.end(); }
+  const abandonedCleanup = await request("/internal/evidence-retention/run", { method: "POST", retentionToken: "ci-retention-token-with-at-least-32-characters" });
+  assert.equal(abandonedCleanup.response.status, 201, JSON.stringify(abandonedCleanup.data));
+  assert.equal(abandonedCleanup.data.purged, 1);
+  const abandonedList = await request(evidencePath, { token: ownerToken });
+  assert.equal(abandonedList.data.find(file => file.id === abandonedIntent.data.evidence.id).status, "PURGED");
 });
 
 after(async () => {
