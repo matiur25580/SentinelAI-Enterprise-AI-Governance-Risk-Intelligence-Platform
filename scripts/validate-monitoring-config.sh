@@ -12,9 +12,10 @@ trap 'rm -rf "$temp_dir"' EXIT
 
 mkdir -p "$temp_dir/rules" "$temp_dir/secrets"
 printf 'ci-only-placeholder-token-not-a-secret\n' > "$temp_dir/secrets/sentinelai-metrics-token"
+printf 'ci-only-placeholder-token-not-a-secret\n' > "$temp_dir/secrets/metrics-token"
 cp "$repo_root/ops/prometheus/alerts.yml" "$temp_dir/rules/alerts.yml"
 
-echo "Validating Prometheus scrape configuration and alert rules..."
+echo "Validating production-example and local Prometheus configurations..."
 docker run --rm --pull=missing \
   --entrypoint promtool \
   -v "$repo_root:/workspace:ro" \
@@ -25,14 +26,28 @@ docker run --rm --pull=missing \
 
 docker run --rm --pull=missing \
   --entrypoint promtool \
+  -v "$repo_root:/workspace:ro" \
+  -v "$temp_dir/rules:/etc/prometheus/rules:ro" \
+  -v "$temp_dir/secrets:/etc/prometheus/secrets:ro" \
+  prom/prometheus:v3.5.0 \
+  check config /workspace/ops/local-monitoring/prometheus.yml
+
+docker run --rm --pull=missing \
+  --entrypoint promtool \
   -v "$temp_dir/rules:/etc/prometheus/rules:ro" \
   prom/prometheus:v3.5.0 \
   check rules /etc/prometheus/rules/alerts.yml
 
-echo "Validating Alertmanager configuration..."
+echo "Validating production-example and local Alertmanager configurations..."
 docker run --rm --pull=missing \
   --entrypoint amtool \
   -v "$repo_root/ops/prometheus/alertmanager.example.yml:/etc/alertmanager/alertmanager.yml:ro" \
+  prom/alertmanager:v0.28.1 \
+  check-config /etc/alertmanager/alertmanager.yml
+
+docker run --rm --pull=missing \
+  --entrypoint amtool \
+  -v "$repo_root/ops/local-monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro" \
   prom/alertmanager:v0.28.1 \
   check-config /etc/alertmanager/alertmanager.yml
 
