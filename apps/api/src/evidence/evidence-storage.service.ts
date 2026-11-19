@@ -178,6 +178,7 @@ export class EvidenceStorageService {
       select: {
         id: true, originalFileName: true, contentType: true, sizeBytes: true, checksumSha256: true,
         status: true, createdAt: true, uploadedAt: true, verifiedAt: true, verificationNote: true,
+        retentionExpiresAt: true, legalHoldAt: true, legalHoldReason: true,
         createdByMembership: { select: { user: { select: { name: true } } } },
         verifiedByMembership: { select: { user: { select: { name: true } } } },
       },
