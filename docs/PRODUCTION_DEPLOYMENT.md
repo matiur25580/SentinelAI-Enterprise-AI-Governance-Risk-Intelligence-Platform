@@ -20,7 +20,7 @@ docker build --pull -f Dockerfile.api -t sentinelai-api:<git-sha> .
 docker build --pull -f Dockerfile.web -t sentinelai-web:<git-sha> .
 ```
 
-The API image uses a multi-stage build, installs only API production dependencies in its runtime stage, includes the generated Prisma client, runs as the unprivileged `node` user, and exposes port 4000 by default. Its built-in health check calls the liveness endpoint. The web image uses Next.js standalone output, runs as the unprivileged `node` user, and exposes port 3000. Both images use Node.js 22 and pnpm 9.15.4 for reproducible workspace builds. CI builds both images on every pull request; it does not publish or deploy them.
+The API image uses a multi-stage build, installs only API production dependencies in its runtime stage, includes the generated Prisma client, runs as the unprivileged `node` user, removes the unused bundled npm CLI from the runtime image, and exposes port 4000 by default. Its built-in health check calls the liveness endpoint. The web image uses Next.js standalone output, runs as the unprivileged `node` user, removes the unused bundled npm CLI from the runtime image, and exposes port 3000. Both images use Node.js 22 and pnpm 9.15.4 for reproducible workspace builds. CI builds both images on every pull request; it does not publish or deploy them.
 
 Supply API configuration through the hosting platform's secret manager (or a protected env file outside the repository). At minimum, configure `NODE_ENV=production`, `API_PORT`, `DATABASE_URL`, independent `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET`, and `WEB_ORIGIN`. Set `TRUST_PROXY_HOPS` only when the exact trusted proxy chain is known. Do not bake secrets into image build arguments or image layers.
 
