@@ -13,6 +13,7 @@ type Assessment = {
 };
 type Profile = { user: { name: string }; organization: { name: string }; role: string };
 type Session = { sessionId: string; createdAt: string; lastUsedAt: string; activeTokenCount: number };
+type AuditLog = { id: string; createdAt: string; action: string; entityType: string; entityId: string | null; chainSequence: string; actorId: string | null; actor?: { id: string; email: string; name: string } | null; metadata?: unknown };
 type EvidenceFile = { id: string; originalFileName: string; contentType: string; sizeBytes: string; checksumSha256: string; status: "PENDING_UPLOAD" | "UPLOADED" | "QUARANTINED" | "PURGED" | "VERIFIED" | "REJECTED"; createdAt: string; uploadedAt?: string | null; verifiedAt?: string | null; verificationNote?: string | null; retentionExpiresAt?: string | null; legalHoldAt?: string | null; legalHoldReason?: string | null; createdByMembership?: { user: { name: string } }; verifiedByMembership?: { user: { name: string } } | null };
 type FormState = { assetId: string; title: string; scope: string; intendedUse: string; dataSensitivity: number; autonomyLevel: number; impact: number; likelihood: number; exposure: number; mitigationCoverage: number; evidenceText: string };
 const API = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1").replace(/\/$/, "");
@@ -24,6 +25,16 @@ export default function RiskAssessmentsPage() {
   const [items, setItems] = useState<Assessment[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [sessionBusy, setSessionBusy] = useState(false);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const [auditTotalPages, setAuditTotalPages] = useState(0);
+  const [auditAction, setAuditAction] = useState("");
+  const [auditEntityType, setAuditEntityType] = useState("");
+  const [auditFrom, setAuditFrom] = useState("");
+  const [auditTo, setAuditTo] = useState("");
+  const [auditBusy, setAuditBusy] = useState(false);
+  const [auditIntegrity, setAuditIntegrity] = useState<{ verified: boolean; recordsChecked: number; reason?: string } | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [status, setStatus] = useState("");
   const [level, setLevel] = useState("");
@@ -54,6 +65,54 @@ export default function RiskAssessmentsPage() {
     return body;
   }, [token]);
 
+  const loadAuditLogs = useCallback(async () => {
+    setAuditBusy(true);
+    try {
+      const params = new URLSearchParams({ page: String(auditPage), limit: "25" });
+      if (auditAction.trim()) params.set("action", auditAction.trim());
+      if (auditEntityType.trim()) params.set("entityType", auditEntityType.trim());
+      if (auditFrom) params.set("from", auditFrom + "T00:00:00.000Z");
+      if (auditTo) params.set("to", auditTo + "T23:59:59.999Z");
+      const result = await api("/audit-logs?" + params.toString());
+      setAuditLogs(result.data || []);
+      setAuditTotal(result.pagination?.total || 0);
+      setAuditTotalPages(result.pagination?.totalPages || 0);
+    } finally { setAuditBusy(false); }
+  }, [api, auditPage, auditAction, auditEntityType, auditFrom, auditTo]);
+
+  async function verifyAuditIntegrity() {
+    setAuditBusy(true); setError("");
+    try {
+      const result = await api("/audit-logs/integrity");
+      setAuditIntegrity(result);
+      setMessage(result.verified ? "Audit chain integrity verified." : "Audit chain verification reported an integrity issue.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Audit integrity verification failed."); }
+    finally { setAuditBusy(false); }
+  }
+
+  async function exportAuditCsv() {
+    setAuditBusy(true); setError("");
+    try {
+      const params = new URLSearchParams();
+      if (auditAction.trim()) params.set("action", auditAction.trim());
+      if (auditEntityType.trim()) params.set("entityType", auditEntityType.trim());
+      if (auditFrom) params.set("from", auditFrom + "T00:00:00.000Z");
+      if (auditTo) params.set("to", auditTo + "T23:59:59.999Z");
+      const response = await fetch(API + "/audit-logs/export.csv?" + params.toString(), { headers: { authorization: "Bearer " + token } });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.message || "Audit export failed (" + response.status + ").");
+      }
+      const url = window.URL.createObjectURL(await response.blob());
+      const anchor = document.createElement("a");
+      anchor.href = url; anchor.download = "sentinelai-audit-logs.csv";
+      document.body.appendChild(anchor); anchor.click(); anchor.remove();
+      window.URL.revokeObjectURL(url);
+      setMessage("Filtered audit log CSV exported.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Audit export failed."); }
+    finally { setAuditBusy(false); }
+  }
+
   const loadSessions = useCallback(async () => {
     const result = await api("/auth/sessions");
     setSessions(result.data || []);
@@ -80,6 +139,11 @@ export default function RiskAssessmentsPage() {
     if (!token) return;
     loadSessions().catch((err: Error) => setError(err.message));
   }, [token, loadSessions]);
+
+  useEffect(() => {
+    if (!token) return;
+    loadAuditLogs().catch((err: Error) => setError(err.message));
+  }, [token, loadAuditLogs]);
 
   useEffect(() => {
     if (!token) return;
@@ -239,7 +303,7 @@ export default function RiskAssessmentsPage() {
   const counts = { open: items.filter(x => x.status === "DRAFT" || x.status === "IN_REVIEW").length, critical: items.filter(x => x.residualLevel === "CRITICAL").length, approved: items.filter(x => x.status === "APPROVED").length };
 
   return <main className="risk-shell">
-    <header className="risk-header"><a className="risk-brand" href="/"><span className="risk-logo">S</span><span>sentinel<span>ai</span><small>GOVERNANCE PLATFORM</small></span></a><nav><a href="/">Overview</a><a className="selected" href="/risk-assessments">Risk intelligence</a>{token && <a href="#sessions">Security sessions</a>}</nav><span className="risk-env"><i /> SECURE WORKSPACE</span></header>
+    <header className="risk-header"><a className="risk-brand" href="/"><span className="risk-logo">S</span><span>sentinel<span>ai</span><small>GOVERNANCE PLATFORM</small></span></a><nav><a href="/">Overview</a><a className="selected" href="/risk-assessments">Risk intelligence</a>{token && <><a href="#sessions">Security sessions</a><a href="#audit-logs">Audit trail</a></>}</nav><span className="risk-env"><i /> SECURE WORKSPACE</span></header>
     <section className="risk-content">
       <div className="risk-heading"><div><div className="risk-kicker">GOVERNANCE / RISK INTELLIGENCE</div><h1>Risk assessment console</h1><p>Evidence-backed risk reviews, independent decisions, and traceable governance.</p></div>{profile && <div className="risk-user"><strong>{profile.user.name}</strong><span>{profile.organization.name} · {profile.role.replaceAll("_", " ")}</span><button onClick={() => { setToken(""); setProfile(null); setItems([]); setAssets([]); }}>Sign out</button></div>}</div>
       {!token ? <section className="risk-login"><div className="risk-login-mark">↗</div><h2>Sign in to your workspace</h2><p>Use your SentinelAI account to view organization-scoped assessments.</p><form onSubmit={login}><label>Email address<input type="email" required autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} /></label><label>Password<input type="password" required minLength={12} autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} /></label><label>Workspace slug <span>(if required)</span><input value={workspace} onChange={e => setWorkspace(e.target.value)} /></label><button className="risk-primary" disabled={busy}>{busy ? "Signing in…" : "Sign in securely"}</button></form><small>API endpoint: {API}</small></section> :
@@ -260,6 +324,31 @@ export default function RiskAssessmentsPage() {
           </article>)}</div> : <div className="session-empty"><strong>No active sessions found</strong><span>Refresh to check again. Your current session may have expired.</span></div>}
           <p className="session-note">Revocation invalidates the session’s refresh-token family and associated access tokens immediately. The action is recorded in the organization audit log.</p>
         </section>
+        <section className="audit-panel" id="audit-logs">
+          <div className="audit-heading"><div><div className="risk-kicker">GOVERNANCE / ACCOUNTABILITY</div><h2>Immutable audit trail</h2><p>Organization-scoped events with chain sequence, actor attribution, and integrity verification.</p></div><div className="audit-actions"><button className="session-refresh" disabled={auditBusy} onClick={verifyAuditIntegrity}>Verify chain</button><button className="session-refresh" disabled={auditBusy} onClick={exportAuditCsv}>Export CSV</button></div></div>
+          {auditIntegrity && <div className={"audit-integrity " + (auditIntegrity.verified ? "verified" : "failed")} role="status"><strong>{auditIntegrity.verified ? "Chain verified" : "Integrity check failed"}</strong><span>{auditIntegrity.recordsChecked.toLocaleString()} records checked{auditIntegrity.reason ? " · " + auditIntegrity.reason : ""}</span></div>}
+          <div className="audit-filters">
+            <label>Action contains<input value={auditAction} maxLength={100} onChange={e => {setAuditAction(e.target.value);setAuditPage(1);}} placeholder="e.g. RISK_ASSESSMENT_APPROVED" /></label>
+            <label>Entity type<input value={auditEntityType} maxLength={100} onChange={e => {setAuditEntityType(e.target.value);setAuditPage(1);}} placeholder="e.g. RiskAssessment" /></label>
+            <label>From<input type="date" value={auditFrom} onChange={e => {setAuditFrom(e.target.value);setAuditPage(1);}} /></label>
+            <label>To<input type="date" value={auditTo} onChange={e => {setAuditTo(e.target.value);setAuditPage(1);}} /></label>
+            <button className="session-refresh" disabled={auditBusy || (!!auditFrom && !!auditTo && auditFrom > auditTo)} onClick={() => loadAuditLogs().catch(err => setError(err.message))}>Apply filters</button>
+          </div>
+          <div className="audit-meta"><span>{auditTotal.toLocaleString()} matching events</span><span>25 events per page</span></div>
+          <div className="audit-list">
+            {auditLogs.map(log => <article className="audit-entry" key={log.id}>
+              <div className="audit-sequence">#{log.chainSequence}</div>
+              <div className="audit-event"><strong>{log.action}</strong><span>{log.entityType}{log.entityId ? " · " + log.entityId : ""}</span><small>{log.actor?.name || log.actor?.email || log.actorId || "System / unknown actor"} · {new Date(log.createdAt).toLocaleString()}</small></div>
+              <button className="audit-detail-toggle" onClick={e => { const node = e.currentTarget.nextElementSibling as HTMLElement | null; if (node) node.hidden = !node.hidden; }}>Metadata</button>
+              <pre className="audit-metadata" hidden>{JSON.stringify(log.metadata ?? {}, null, 2)}</pre>
+            </article>)}
+            {!auditBusy && auditLogs.length === 0 && <div className="session-empty"><strong>No audit events match these filters</strong><span>Try a wider date range or remove an action/entity filter.</span></div>}
+            {auditBusy && <div className="session-empty"><strong>Loading audit events…</strong></div>}
+          </div>
+          <div className="audit-pagination"><span>Page {auditPage} of {Math.max(1,auditTotalPages)}</span><div><button className="session-refresh" disabled={auditBusy || auditPage <= 1} onClick={() => setAuditPage(p => Math.max(1,p-1))}>Previous</button><button className="session-refresh" disabled={auditBusy || auditPage >= auditTotalPages} onClick={() => setAuditPage(p => p+1)}>Next</button></div></div>
+          <p className="session-note">Audit records are read-only here. Export is capped by the API at 10,000 matching records and protects spreadsheet cells against formula injection.</p>
+        </section>
+
 
       </>}
       {error && <div className="risk-alert error" role="alert">{error}</div>}{message && <div className="risk-alert success" role="status">{message}</div>}
