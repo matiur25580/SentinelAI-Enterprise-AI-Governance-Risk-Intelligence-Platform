@@ -120,4 +120,16 @@ export class AuditLogsService {
       ...rows.map((row) => row.map(csvCell).join(",")),
     ].join("\r\n") + "\r\n";
   }
+
+  async verifyIntegrity(auth: AuthenticatedUser) {
+    const rows = await this.prisma.$queryRawUnsafe<Array<{ result: unknown }>>(
+      'SELECT sentinel_verify_audit_chain($1) AS result',
+      auth.organizationId,
+    );
+    return rows[0]?.result ?? {
+      verified: false,
+      recordsChecked: 0,
+      reason: "VERIFIER_RETURNED_NO_RESULT",
+    };
+  }
 }
