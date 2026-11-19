@@ -134,7 +134,8 @@ test("register, login, refresh rotation, and logout work against PostgreSQL", { 
       ),
       "A workspace must see only its own audit history, never another workspace's asset events.",
     );
-    await database.query('UPDATE "Membership" SET "role" = \'MEMBER\', "updatedAt" = NOW() WHERE "id" = $1', [secondMembershipId]);
+    // Restore an asset-authorized role so cross-workspace writes reach the tenant-scoped service.
+    await database.query('UPDATE "Membership" SET "role" = \'OWNER\', "updatedAt" = NOW() WHERE "id" = $1', [secondMembershipId]);
 
     const primaryMembership = await database.query(
       'SELECT "id" FROM "Membership" WHERE "userId" = (SELECT "id" FROM "User" WHERE "email" = $1) AND "organizationId" = $2',
