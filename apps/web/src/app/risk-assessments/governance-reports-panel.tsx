@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import ComplianceMappingPanel from "./compliance-mapping-panel";
 
 type Bucket = { status?: string; severity?: string; residualLevel?: string; assetType?: string; count: number };
 type Report = {
@@ -110,5 +111,6 @@ export default function GovernanceReportsPanel({ api, downloadUrl, token }: { ap
       </div>
       <p className="governance-report-caveat">{report.caveat} Generated {new Date(report.generatedAt).toLocaleString()}.</p>
     </>}
+    <ComplianceMappingPanel />
   </section>;
 }
