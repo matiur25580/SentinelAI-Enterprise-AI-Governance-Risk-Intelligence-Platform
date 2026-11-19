@@ -12,6 +12,7 @@ type Assessment = {
   createdByMembership?: { user: { name: string } }; reviewedByMembership?: { user: { name: string } } | null;
 };
 type Profile = { user: { name: string }; organization: { name: string }; role: string };
+type Session = { sessionId: string; createdAt: string; lastUsedAt: string; activeTokenCount: number };
 type EvidenceFile = { id: string; originalFileName: string; contentType: string; sizeBytes: string; checksumSha256: string; status: "PENDING_UPLOAD" | "UPLOADED" | "QUARANTINED" | "PURGED" | "VERIFIED" | "REJECTED"; createdAt: string; uploadedAt?: string | null; verifiedAt?: string | null; verificationNote?: string | null; retentionExpiresAt?: string | null; legalHoldAt?: string | null; legalHoldReason?: string | null; createdByMembership?: { user: { name: string } }; verifiedByMembership?: { user: { name: string } } | null };
 type FormState = { assetId: string; title: string; scope: string; intendedUse: string; dataSensitivity: number; autonomyLevel: number; impact: number; likelihood: number; exposure: number; mitigationCoverage: number; evidenceText: string };
 const API = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1").replace(/\/$/, "");
@@ -21,6 +22,8 @@ export default function RiskAssessmentsPage() {
   const [token, setToken] = useState("");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [items, setItems] = useState<Assessment[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [sessionBusy, setSessionBusy] = useState(false);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [status, setStatus] = useState("");
   const [level, setLevel] = useState("");
@@ -51,6 +54,11 @@ export default function RiskAssessmentsPage() {
     return body;
   }, [token]);
 
+  const loadSessions = useCallback(async () => {
+    const result = await api("/auth/sessions");
+    setSessions(result.data || []);
+  }, [api]);
+
   const load = useCallback(async () => {
     const params = new URLSearchParams();
     if (status) params.set("status", status);
@@ -70,6 +78,11 @@ export default function RiskAssessmentsPage() {
 
   useEffect(() => {
     if (!token) return;
+    loadSessions().catch((err: Error) => setError(err.message));
+  }, [token, loadSessions]);
+
+  useEffect(() => {
+    if (!token) return;
     let active = true;
     load().catch((err: Error) => { if (active) setError(err.message); });
     return () => { active = false; };
@@ -84,6 +97,28 @@ export default function RiskAssessmentsPage() {
       setToken(data.accessToken); setPassword("");
     } catch (err) { setError(err instanceof Error ? err.message : "Unable to sign in."); }
     finally { setBusy(false); }
+  }
+
+  async function revokeSession(sessionId: string) {
+    if (!window.confirm("Revoke this login session? Its access and refresh tokens will stop working immediately.")) return;
+    setSessionBusy(true); setError(""); setMessage("");
+    try {
+      await api("/auth/sessions/" + sessionId, { method: "DELETE" });
+      setSessions(current => current.filter(session => session.sessionId !== sessionId));
+      let activeSessionId = "";
+      try {
+        const payload = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+        activeSessionId = JSON.parse(window.atob(payload)).sessionId || "";
+      } catch { /* Token payload is opaque to the UI if it cannot be decoded. */ }
+      if (activeSessionId === sessionId) {
+        setToken(""); setProfile(null); setItems([]); setAssets([]); setSessions([]);
+        setMessage("This session was revoked. Sign in again to continue.");
+      } else {
+        setMessage("Session revoked. Its access and refresh tokens are now invalid.");
+        await loadSessions();
+      }
+    } catch (err) { setError(err instanceof Error ? err.message : "Session revocation failed."); }
+    finally { setSessionBusy(false); }
   }
 
   async function createAssessment(event: FormEvent<HTMLFormElement>) {
@@ -204,7 +239,7 @@ export default function RiskAssessmentsPage() {
   const counts = { open: items.filter(x => x.status === "DRAFT" || x.status === "IN_REVIEW").length, critical: items.filter(x => x.residualLevel === "CRITICAL").length, approved: items.filter(x => x.status === "APPROVED").length };
 
   return <main className="risk-shell">
-    <header className="risk-header"><a className="risk-brand" href="/"><span className="risk-logo">S</span><span>sentinel<span>ai</span><small>GOVERNANCE PLATFORM</small></span></a><nav><a href="/">Overview</a><a className="selected" href="/risk-assessments">Risk intelligence</a></nav><span className="risk-env"><i /> SECURE WORKSPACE</span></header>
+    <header className="risk-header"><a className="risk-brand" href="/"><span className="risk-logo">S</span><span>sentinel<span>ai</span><small>GOVERNANCE PLATFORM</small></span></a><nav><a href="/">Overview</a><a className="selected" href="/risk-assessments">Risk intelligence</a>{token && <a href="#sessions">Security sessions</a>}</nav><span className="risk-env"><i /> SECURE WORKSPACE</span></header>
     <section className="risk-content">
       <div className="risk-heading"><div><div className="risk-kicker">GOVERNANCE / RISK INTELLIGENCE</div><h1>Risk assessment console</h1><p>Evidence-backed risk reviews, independent decisions, and traceable governance.</p></div>{profile && <div className="risk-user"><strong>{profile.user.name}</strong><span>{profile.organization.name} · {profile.role.replaceAll("_", " ")}</span><button onClick={() => { setToken(""); setProfile(null); setItems([]); setAssets([]); }}>Sign out</button></div>}</div>
       {!token ? <section className="risk-login"><div className="risk-login-mark">↗</div><h2>Sign in to your workspace</h2><p>Use your SentinelAI account to view organization-scoped assessments.</p><form onSubmit={login}><label>Email address<input type="email" required autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} /></label><label>Password<input type="password" required minLength={12} autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} /></label><label>Workspace slug <span>(if required)</span><input value={workspace} onChange={e => setWorkspace(e.target.value)} /></label><button className="risk-primary" disabled={busy}>{busy ? "Signing in…" : "Sign in securely"}</button></form><small>API endpoint: {API}</small></section> :
@@ -213,6 +248,19 @@ export default function RiskAssessmentsPage() {
         <div className="risk-toolbar"><div><h2>Assessment register</h2><p>Organization-scoped records from the authenticated API.</p></div><div className="risk-filters"><select value={status} onChange={e => setStatus(e.target.value)}><option value="">All statuses</option><option>DRAFT</option><option>IN_REVIEW</option><option>APPROVED</option><option>REJECTED</option></select><select value={level} onChange={e => setLevel(e.target.value)}><option value="">All risk levels</option><option>LOW</option><option>MEDIUM</option><option>HIGH</option><option>CRITICAL</option></select><button onClick={() => load().catch(e => setError(e.message))}>Refresh</button><button className="risk-create-button" onClick={() => { setError(""); setShowCreate(true); }}>＋ New assessment</button></div></div>
         <div className="risk-table-wrap"><table className="risk-table"><thead><tr><th>ASSESSMENT</th><th>AI ASSET</th><th>RESIDUAL RISK</th><th>SCORE</th><th>STATUS</th><th>CREATED</th><th>ACTIONS</th></tr></thead><tbody>{items.map(item => <tr key={item.id}><td><button className="risk-link-button" onClick={() => openDetail(item.id)}><strong>{item.title}</strong></button><small>{item.id.slice(0, 10)} · {item.scoringVersion}</small></td><td>{item.asset.name}<small>{item.asset.assetType.replaceAll("_", " ")}</small></td><td><span className={"risk-level " + item.residualLevel.toLowerCase()}>{item.residualLevel}</span></td><td><strong>{item.residualScore.toFixed(1)}</strong><small>Inherent {item.inherentScore.toFixed(1)}</small></td><td><span className={"risk-status " + item.status.toLowerCase()}>{item.status.replaceAll("_", " ")}</span></td><td>{new Date(item.createdAt).toLocaleDateString()}</td><td><div className="risk-actions">{item.status === "DRAFT" && <button disabled={busy} onClick={() => submitDraft(item.id)}>Submit</button>}{item.status === "IN_REVIEW" && <><button disabled={busy} onClick={() => { setReview({ id: item.id, decision: "APPROVED" }); setRationale(""); }}>Approve</button><button className="reject" disabled={busy} onClick={() => { setReview({ id: item.id, decision: "REJECTED" }); setRationale(""); }}>Reject</button></>}</div></td></tr>)}</tbody></table>{items.length === 0 && <div className="risk-empty"><span>◇</span><strong>No assessments in this view</strong><p>Create an assessment for an AI asset or adjust the filters.</p></div>}</div>
         <div className="risk-footnote">Risk scores are project-specific triage heuristics, not regulatory certifications or compliance determinations.</div>
+        <section className="session-panel" id="sessions">
+          <div className="session-panel-heading">
+            <div><div className="risk-kicker">ACCOUNT SECURITY</div><h2>Active login sessions</h2><p>Review and revoke access across your active sign-ins. Device and location details are not collected.</p></div>
+            <button className="session-refresh" disabled={sessionBusy} onClick={() => loadSessions().catch(err => setError(err.message))}>↻ Refresh</button>
+          </div>
+          {sessions.length ? <div className="session-list">{sessions.map(session => <article className="session-card" key={session.sessionId}>
+            <div className="session-icon">⌘</div>
+            <div className="session-details"><strong>SentinelAI session · {session.sessionId.slice(0, 8)}</strong><span>Started {new Date(session.createdAt).toLocaleString()}</span><span>Last token activity {new Date(session.lastUsedAt).toLocaleString()} · {session.activeTokenCount} active refresh token{session.activeTokenCount === 1 ? "" : "s"}</span></div>
+            <button className="session-revoke" disabled={sessionBusy} onClick={() => revokeSession(session.sessionId)}>Revoke session</button>
+          </article>)}</div> : <div className="session-empty"><strong>No active sessions found</strong><span>Refresh to check again. Your current session may have expired.</span></div>}
+          <p className="session-note">Revocation invalidates the session’s refresh-token family and associated access tokens immediately. The action is recorded in the organization audit log.</p>
+        </section>
+
       </>}
       {error && <div className="risk-alert error" role="alert">{error}</div>}{message && <div className="risk-alert success" role="status">{message}</div>}
     </section>
