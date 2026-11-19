@@ -9,10 +9,24 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  build-and-auth-integration:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: sentinelai
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d sentinelai"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
-      DATABASE_URL: postgresql://sentinelai:sentinelai@localhost:5432/sentinelai?schema=public
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/sentinelai
       JWT_ACCESS_SECRET: ci-only-access-secret-change-me-32-characters
       JWT_REFRESH_SECRET: ci-only-refresh-secret-change-me-32-characters
     steps:
@@ -27,10 +41,14 @@ jobs:
         run: pnpm install --no-frozen-lockfile
       - name: Generate Prisma client
         run: pnpm db:generate
+      - name: Apply database migration
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/migrations/20261119000000_init/migration.sql
       - name: Type check
         run: pnpm typecheck
       - name: Build workspaces
         run: pnpm build
+      - name: Run authentication integration tests
+        run: pnpm --filter @sentinelai/api test:integration
       - name: Check required foundation files
         run: |
           test -f README.md
