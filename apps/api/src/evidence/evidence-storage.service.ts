@@ -295,15 +295,15 @@ export class EvidenceStorageService {
       throw new ConflictException("Only quarantined evidence can be purged.");
     }
 
-    // Delete the private object first. Storage deletion is idempotent for missing objects,
-    // so a retry can safely complete the metadata transition if the DB write previously failed.
-    await this.storage.deleteObject(evidence.storageKey);
     return this.prisma.$transaction(async (tx) => {
+      // Claim the quarantined row before touching object storage. The conditional update
+      // serializes concurrent rescans/purges; a failed DELETE rolls the DB transition back.
       const changed = await tx.evidenceFile.updateMany({
         where: { id: evidenceId, organizationId: auth.organizationId, status: EvidenceFileStatus.QUARANTINED },
         data: { status: EvidenceFileStatus.PURGED },
       });
       if (changed.count !== 1) throw new ConflictException("Evidence state changed; reload and try again.");
+      await this.storage.deleteObject(evidence.storageKey);
       await tx.auditLog.create({
         data: {
           organizationId: auth.organizationId,
