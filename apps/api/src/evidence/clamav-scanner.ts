@@ -15,7 +15,7 @@ export class ClamAvScanner {
       throw new ServiceUnavailableException("Evidence malware scanning is not configured; upload completion is blocked.");
     }
 
-    return new Promise((resolve, reject) => {
+    return new Promise<MalwareScanResult>((resolve, reject) => {
       const socket = net.createConnection({ host, port });
       const response: Buffer[] = [];
       let settled = false;
@@ -28,7 +28,7 @@ export class ClamAvScanner {
       };
       socket.setTimeout(15_000);
       socket.on("connect", () => {
-        socket.write(Buffer.from("zINSTREAM\\0"));
+        socket.write(Buffer.from("zINSTREAM\0"));
         for (let offset = 0; offset < bytes.length; offset += 64 * 1024) {
           const chunk = bytes.subarray(offset, Math.min(offset + 64 * 1024, bytes.length));
           const length = Buffer.alloc(4);
@@ -41,10 +41,10 @@ export class ClamAvScanner {
       socket.on("data", (chunk) => {
         response.push(chunk);
         const text = Buffer.concat(response).toString("utf8");
-        if (!text.includes("\\0")) return;
-        if (text.includes(" OK\\0")) finish(undefined, { clean: true });
-        else if (text.includes(" FOUND\\0")) {
-          const signature = text.split(": ").pop()?.replace(/ FOUND\\0$/, "") ?? "Malware";
+        if (!text.includes("\0")) return;
+        if (text.includes(" OK\0")) finish(undefined, { clean: true });
+        else if (text.includes(" FOUND\0")) {
+          const signature = text.split(": ").pop()?.replace(/ FOUND\0$/, "") ?? "Malware";
           finish(undefined, { clean: false, signature });
         } else finish(new Error("ClamAV returned an unexpected scan response."));
       });
