@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import type { AuthenticatedUser } from "../auth/interfaces/authenticated-user.interface.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import type { CreateAssetDto } from "./dto/create-asset.dto.js";
@@ -92,6 +92,10 @@ export class AssetsService {
       });
       if (!existing) throw new NotFoundException("AI asset was not found.");
 
+      const assessmentCount = await tx.riskAssessment.count({ where: { assetId: existing.id } });
+      if (assessmentCount > 0) {
+        throw new ConflictException("Assets with risk assessment history cannot be deleted; retire the asset instead.");
+      }
       await tx.aIAsset.delete({ where: { id: existing.id } });
       await tx.auditLog.create({
         data: {

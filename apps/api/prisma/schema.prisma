@@ -37,6 +37,20 @@ enum AssetStatus {
   RETIRED
 }
 
+enum RiskAssessmentStatus {
+  DRAFT
+  IN_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
 model Organization {
   id          String       @id @default(cuid())
   name        String
@@ -49,6 +63,7 @@ model Organization {
   refreshTokens RefreshToken[]
   auditLogs   AuditLog[]
   auditChainHead AuditChainHead?
+  riskAssessments RiskAssessment[]
 
   @@index([isActive])
 }
@@ -81,6 +96,8 @@ model Membership {
   organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   refreshTokens  RefreshToken[]
   assets         AIAsset[]      @relation("AssetOwner")
+  riskAssessmentsCreated RiskAssessment[] @relation("RiskAssessmentCreator")
+  riskAssessmentsReviewed RiskAssessment[] @relation("RiskAssessmentReviewer")
 
   @@unique([userId, organizationId])
   @@index([organizationId, role])
@@ -123,6 +140,7 @@ model AIAsset {
   updatedAt      DateTime    @updatedAt
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   owner          Membership? @relation("AssetOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  riskAssessments RiskAssessment[]
 
   @@index([organizationId, status])
   @@index([organizationId, assetType])
@@ -156,4 +174,42 @@ model AuditChainHead {
   lastHash       String       @default("")
   updatedAt      DateTime     @updatedAt
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+}
+
+model RiskAssessment {
+  id                    String               @id @default(cuid())
+  organizationId        String
+  assetId               String
+  createdByMembershipId String
+  reviewedByMembershipId String?
+  title                 String
+  scope                 String
+  intendedUse           String
+  dataSensitivity       Int
+  autonomyLevel         Int
+  impact                Int
+  likelihood            Int
+  exposure              Int
+  mitigationCoverage    Int                  @default(0)
+  inherentScore         Float
+  residualScore         Float
+  inherentLevel         RiskLevel
+  residualLevel         RiskLevel
+  scoringVersion        String               @default("sentinelai-risk-v1")
+  evidence              Json
+  status                RiskAssessmentStatus @default(DRAFT)
+  reviewRationale       String?
+  submittedAt           DateTime?
+  reviewedAt            DateTime?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  organization          Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  asset                 AIAsset              @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  createdByMembership  Membership           @relation("RiskAssessmentCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  reviewedByMembership Membership?          @relation("RiskAssessmentReviewer", fields: [reviewedByMembershipId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, status, createdAt])
+  @@index([organizationId, residualLevel])
+  @@index([assetId, createdAt])
+  @@index([createdByMembershipId])
 }
