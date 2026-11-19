@@ -4,6 +4,7 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
 import type { AuthenticatedUser } from "../auth/interfaces/authenticated-user.interface.js";
 import { CreateEvidenceUploadDto } from "./dto/create-evidence-upload.dto.js";
 import { VerifyEvidenceDto } from "./dto/verify-evidence.dto.js";
+import { PurgeEvidenceDto } from "./dto/purge-evidence.dto.js";
 import { EvidenceStorageService } from "./evidence-storage.service.js";
 
 @UseGuards(JwtAuthGuard)
@@ -35,4 +36,14 @@ export class EvidenceController {
   decide(@CurrentUser() user: AuthenticatedUser, @Param("assessmentId") assessmentId: string, @Param("evidenceId") evidenceId: string, @Body() dto: VerifyEvidenceDto) {
     return this.service.decide(user, assessmentId, evidenceId, dto);
   }
+  @Post(":evidenceId/rescan")
+  rescan(@CurrentUser() user: AuthenticatedUser, @Param("assessmentId") assessmentId: string, @Param("evidenceId") evidenceId: string) {
+    return this.service.rescanQuarantined(user, assessmentId, evidenceId);
+  }
+
+  @Post(":evidenceId/purge")
+  purge(@CurrentUser() user: AuthenticatedUser, @Param("assessmentId") assessmentId: string, @Param("evidenceId") evidenceId: string, @Body() dto: PurgeEvidenceDto) {
+    return this.service.purgeQuarantined(user, assessmentId, evidenceId, dto);
+  }
+
 }
