@@ -220,7 +220,11 @@ test("risk assessment scoring, tenant isolation, submission, independent approva
   });
   assert.equal(outsiderIntegrity.response.status, 200);
   assert.equal(outsiderIntegrity.data.verified, true);
-  assert.equal(outsiderIntegrity.data.recordsChecked, 0);
+  assert.ok(outsiderIntegrity.data.recordsChecked > 0, "The outsider's own registration audit event should be present.");
+  assert.ok(
+    outsiderIntegrity.data.recordsChecked < integrity.data.recordsChecked,
+    "The outsider integrity response must exclude the larger owner-organization audit chain.",
+  );
 });
 
 after(async () => {
