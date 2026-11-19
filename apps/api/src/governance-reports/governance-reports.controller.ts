@@ -1,4 +1,5 @@
-import { Controller, Get, Header, Query, UseGuards } from "@nestjs/common";
+import { Controller, Get, Header, Query, Res, UseGuards } from "@nestjs/common";
+import type { Response } from "express";
 import { MembershipRole } from "../generated/prisma/client.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { Roles } from "../auth/decorators/roles.decorator.js";
@@ -34,5 +35,21 @@ export class GovernanceReportsController {
   @Header("Content-Disposition", 'attachment; filename="sentinelai-governance-report.csv"')
   exportCsv(@CurrentUser() user: AuthenticatedUser, @Query() query: GovernanceReportQueryDto) {
     return this.service.exportCsv(user, query);
+  }
+
+  @Get("export.zip")
+  @Roles(...REPORT_ROLES)
+  async exportAuditPackage(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: GovernanceReportQueryDto,
+    @Res() response: Response,
+  ): Promise<void> {
+    const archive = await this.service.exportAuditPackage(user, query);
+    response.setHeader("Content-Type", "application/zip");
+    response.setHeader("Content-Disposition", 'attachment; filename="sentinelai-governance-audit-package.zip"');
+    response.setHeader("Content-Length", archive.length);
+    response.setHeader("Cache-Control", "no-store");
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    response.send(archive);
   }
 }

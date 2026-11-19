@@ -418,6 +418,7 @@ Before go-live, complete the remaining controls described in [Production Deploym
 | [Monitoring runbook](docs/MONITORING_ALERTING_RUNBOOK.md) | Metrics, alerting and operational response |
 | [Backup and recovery](docs/DATABASE_BACKUP_RECOVERY.md) | Database backup and restore guidance |
 | [Framework evidence mapping](docs/FRAMEWORK_EVIDENCE_MAPPING.md) | Indicative NIST AI RMF and ISO/IEC 42001 capability crosswalk, evidence pointers and limitations |
+| [Governance audit package](docs/GOVERNANCE_AUDIT_PACKAGE.md) | Authenticated PDF/ZIP export, JSON/CSV inventories, integrity metadata, limits and safeguards |
 | [Development roadmap](docs/ROADMAP.md) | Milestones and implementation progress |
 
 ## Roadmap
