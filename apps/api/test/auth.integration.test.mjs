@@ -350,6 +350,16 @@ test("register, login, refresh rotation, and logout work against PostgreSQL", { 
   });
   assert.equal(reusedRefresh.response.status, 401, "A rotated refresh token must not be reusable.");
 
+  const reusedFamilyDescendant = await request("/auth/refresh", {
+    method: "POST",
+    body: { refreshToken: refresh.data.refreshToken },
+  });
+  assert.equal(
+    reusedFamilyDescendant.response.status,
+    401,
+    "Reusing a rotated token must revoke its entire refresh-token family, including the newest descendant.",
+  );
+
   const logout = await request("/auth/logout", {
     method: "POST",
     body: { refreshToken: refresh.data.refreshToken },

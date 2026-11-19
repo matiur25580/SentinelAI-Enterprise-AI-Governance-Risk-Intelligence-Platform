@@ -37,14 +37,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: pnpm
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
       - name: Generate Prisma client
         run: pnpm db:generate
       - name: Apply database migrations
         run: |
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/migrations/20261119000000_init/migration.sql
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/migrations/20261119000100_audit_integrity_chain/migration.sql
+          for migration in apps/api/prisma/migrations/*/migration.sql; do
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
+          done
       - name: Type check
         run: pnpm typecheck
       - name: Build workspaces
