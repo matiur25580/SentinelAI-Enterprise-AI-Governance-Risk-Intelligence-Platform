@@ -123,6 +123,20 @@ test("register, login, refresh rotation, and logout work against PostgreSQL", { 
       [secondMembershipId],
     );
 
+    // Auditors can read only their own workspace's compliance history.
+    await database.query('UPDATE "Membership" SET "role" = \'AUDITOR\', "updatedAt" = NOW() WHERE "id" = $1', [secondMembershipId]);
+    const secondaryAuditLogs = await request("/audit-logs", { token: secondaryLogin.data.accessToken });
+    assert.equal(secondaryAuditLogs.response.status, 200, JSON.stringify(secondaryAuditLogs.data));
+    assert.equal(secondaryAuditLogs.data.pagination.total, 1);
+    assert.ok(
+      secondaryAuditLogs.data.data.every((entry) =>
+        entry.organizationId === secondOrganizationId && entry.action === "auth.login"
+      ),
+      "A workspace must see only its own audit history, never another workspace's asset events.",
+    );
+    // Restore an asset-authorized role so cross-workspace writes reach the tenant-scoped service.
+    await database.query('UPDATE "Membership" SET "role" = \'OWNER\', "updatedAt" = NOW() WHERE "id" = $1', [secondMembershipId]);
+
     const primaryMembership = await database.query(
       'SELECT "id" FROM "Membership" WHERE "userId" = (SELECT "id" FROM "User" WHERE "email" = $1) AND "organizationId" = $2',
       [email, profile.data.organization.id],
@@ -184,6 +198,8 @@ test("register, login, refresh rotation, and logout work against PostgreSQL", { 
       body: { name: "Unauthorized overwrite" },
     });
     assert.equal(memberUpdateDenied.response.status, 403, "MEMBER cannot update assets.");
+    const memberAuditDenied = await request("/audit-logs", { token: register.data.accessToken });
+    assert.equal(memberAuditDenied.response.status, 403, "MEMBER cannot read compliance audit logs.");
 
     await setPrimaryRole("AI_ENGINEER");
     const updatedAsset = await request(`/assets/${createdAsset.data.id}`, {
@@ -211,6 +227,29 @@ test("register, login, refresh rotation, and logout work against PostgreSQL", { 
 
     const deletedAssetRead = await request(`/assets/${createdAsset.data.id}`, { token: register.data.accessToken });
     assert.equal(deletedAssetRead.response.status, 404);
+
+    const auditLogs = await request("/audit-logs?entityType=AIAsset&page=1&limit=10", {
+      token: register.data.accessToken,
+    });
+    assert.equal(auditLogs.response.status, 200, JSON.stringify(auditLogs.data));
+    assert.ok(auditLogs.data.pagination.total >= 3);
+    assert.ok(auditLogs.data.data.some((entry) => entry.action === "asset.create"));
+    assert.ok(auditLogs.data.data.some((entry) => entry.action === "asset.update"));
+    assert.ok(auditLogs.data.data.some((entry) => entry.action === "asset.delete"));
+    assert.ok(auditLogs.data.data.every((entry) => entry.organizationId === profile.data.organization.id));
+    assert.ok(auditLogs.data.data.every((entry) => entry.actor?.email === email));
+
+    const filteredAuditLogs = await request("/audit-logs?action=asset.create&entityType=AIAsset", {
+      token: register.data.accessToken,
+    });
+    assert.equal(filteredAuditLogs.response.status, 200);
+    assert.ok(filteredAuditLogs.data.data.length >= 1);
+    assert.ok(filteredAuditLogs.data.data.every((entry) => entry.action === "asset.create"));
+
+    const invalidAuditRange = await request("/audit-logs?from=2026-11-20T00:00:00Z&to=2026-11-19T00:00:00Z", {
+      token: register.data.accessToken,
+    });
+    assert.equal(invalidAuditRange.response.status, 400, "Invalid date ranges must be rejected.");
 
     await database.query('UPDATE "Membership" SET "isActive" = false, "updatedAt" = NOW() WHERE "id" = $1', [secondMembershipId]);
     const inactiveMembershipProfile = await request("/auth/me", { token: secondaryLogin.data.accessToken });
