@@ -2,7 +2,7 @@
 
 ## Overview
 
-Risk assessment evidence can be uploaded to a private S3-compatible object store using short-lived SigV4 presigned URLs. The API stores organization-scoped metadata and verifies the uploaded object's size, content type, and SHA-256 checksum before marking it `UPLOADED`. A separate authorized reviewer must then explicitly mark it `VERIFIED` or `REJECTED` with a rationale.
+Risk assessment evidence can be uploaded to a private S3-compatible object store using short-lived SigV4 presigned URLs. The API stores organization-scoped metadata and verifies the uploaded object's size, content type, and SHA-256 checksum, validates its file signature/encoding, and submits the bytes to ClamAV before making it available to reviewers. Clean files become `UPLOADED`; detected malware is moved to `QUARANTINED`. A separate authorized reviewer can then mark clean files `VERIFIED` or `REJECTED` with a rationale.
 
 Evidence is never made public. Download URLs are generated only after an authenticated, organization-scoped lookup and expire after 120 seconds. Upload URLs expire after 300 seconds.
 
@@ -28,20 +28,23 @@ For browser uploads, configure bucket CORS to allow only the deployed web origin
 - The client supplies a SHA-256 hex digest. The digest is converted to S3's base64 checksum header and cryptographically bound to the presigned upload request. S3 validates the bytes against this checksum; the API then compares checksum, byte length, and content type on object HEAD.
 - Original file names are metadata only. Object keys are generated UUIDs scoped under organization and assessment IDs; user-provided names never become storage paths.
 - No arbitrary URL fetches, public object URLs, or user-controlled storage keys are accepted.
-- The API's media-type allowlist is not malware scanning or deep file-format validation. Production deployments should add an antivirus/content-disarm scanning pipeline before evidence is eligible for human verification. Do not upload executable files or secrets.
+- The API checks PDF, PNG, and JPEG magic bytes; text and CSV must be valid UTF-8 without NUL bytes. This is format-signature validation, not a full parser or content-disarm/reconstruction engine.
+- Every completed upload is downloaded through a short-lived private URL and scanned by ClamAV using the INSTREAM protocol. Scanner outages, timeouts, or malformed responses fail closed: the file is not marked clean or made available for download/review.
+- A ClamAV `FOUND` result moves the file to `QUARANTINED`; quarantined files cannot be downloaded or human-verified through the API. The scanner signature is recorded in the audit event. Do not upload executable files or secrets.
 
 ## Lifecycle
 
-`PENDING_UPLOAD → UPLOADED → VERIFIED | REJECTED`
+`PENDING_UPLOAD → UPLOADED (ClamAV clean) → VERIFIED | REJECTED`  
+`PENDING_UPLOAD → QUARANTINED (malware detected)`
 
 1. An OWNER, ADMIN, AI_GOVERNANCE, or AI_ENGINEER requests an upload intent for an assessment in their organization.
 2. The API creates a private metadata row and a five-minute presigned PUT URL with signed content type and checksum headers.
 3. The browser uploads bytes directly to object storage, then calls the completion endpoint.
-4. The API performs a signed HEAD request and compares object size, media type, and S3-validated SHA-256 checksum with the intent. Only then does it transition to `UPLOADED`.
-5. A different authorized reviewer (OWNER, ADMIN, AI_GOVERNANCE, SECURITY_ANALYST, or COMPLIANCE_OFFICER) records a rationale and makes the final `VERIFIED` or `REJECTED` decision.
+4. The API performs a signed HEAD request and compares object size, media type, and S3-validated SHA-256 checksum with the intent. It then retrieves the object (maximum 20 MiB), validates the file signature/encoding, and scans it with ClamAV. Only a clean scan transitions to `UPLOADED`; a detection transitions to `QUARANTINED`. Scanner errors fail closed.
+5. A different authorized reviewer (OWNER, ADMIN, AI_GOVERNANCE, SECURITY_ANALYST, or COMPLIANCE_OFFICER) records a rationale and makes the final `VERIFIED` or `REJECTED` decision on clean `UPLOADED` evidence only.
 6. Upload intent, completion, download URL issuance, and verification decisions are written to the append-only organization audit log.
 
-Evidence creators cannot verify their own files. Completed decisions cannot be overwritten through this API. Rejected objects are retained in private storage pending a documented retention/deletion policy; the API does not silently delete audit-relevant evidence.
+Evidence creators cannot verify their own files. Quarantined files are unavailable for download and review. Completed decisions cannot be overwritten through this API. Rejected objects are retained in private storage pending a documented retention/deletion policy; the API does not silently delete audit-relevant evidence.
 
 ## API
 
@@ -81,4 +84,6 @@ Verification body:
 - The S3-compatible endpoint must support AWS Signature Version 4 presigned PUT/GET requests, signed HEAD requests, and checksum-mode HEAD responses.
 - Configure object-store CORS and bucket policy separately; the API does not provision infrastructure.
 - A HEAD metadata match proves the uploaded bytes match the supplied SHA-256 checksum and declared metadata; it does not establish that the document is truthful, safe, or substantively adequate.
-- Malware scanning, content disarm/reconstruction, automated evidence classification, retention automation, and legal hold workflows are not implemented.
+- Configure `CLAMAV_HOST` and optional `CLAMAV_PORT` (default `3310`) to reach a maintained ClamAV daemon. In production, the API refuses to start with evidence storage enabled if `CLAMAV_HOST` is missing.
+- Keep ClamAV signatures updated and isolate the scanner on a private network. The integration suite uses a local protocol-compatible test double; it does not replace deployment validation against a real ClamAV service.
+- Full document parsing, content disarm/reconstruction, automated evidence classification, retention automation, and legal hold workflows are not implemented.
