@@ -135,3 +135,27 @@
 .incident-meta{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:10px;color:#8292a9;font-size:9px}.incident-resolution{margin-top:11px;padding:10px;background:#0b1722;border-left:2px solid #4c8b71}.incident-resolution strong{font-size:9px;color:#9de5c5}.incident-resolution p{margin-top:4px}
 .incident-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px}.incident-actions input{flex:1;min-width:220px}.incident-empty{display:grid;gap:5px;padding:20px;text-align:center;color:#aebed3}.incident-empty strong{font-size:11px}.incident-empty span,.incident-error,.incident-message{font-size:10px;color:#8292a9}.incident-error{color:#ffb1ad}.incident-message{color:#9de5c5}
 @media(max-width:650px){.incident-panel{padding:14px}.incident-heading{align-items:flex-start;flex-direction:column}.incident-create{grid-template-columns:1fr}.incident-full{grid-column:auto}.incident-filters{align-items:stretch;flex-wrap:wrap}.incident-filters label{flex:1;min-width:120px}.incident-filters>span{margin-left:0;width:100%}.incident-card-top{flex-wrap:wrap}.incident-card-top time{width:100%;margin-left:0}.incident-actions input{min-width:100%}}
+
+
+/* Executive governance and compliance reporting */
+.governance-report-panel{margin-top:28px;padding:20px;background:#0e1624;border:1px solid #26364b;border-radius:10px}
+.governance-report-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:15px}
+.governance-report-heading h2{font-size:15px;margin:7px 0 5px}.governance-report-heading p{font-size:10px;color:#8796aa;margin:0;line-height:1.6}
+.governance-report-filters{display:flex;align-items:end;gap:10px;flex-wrap:wrap;padding:12px 0 16px}
+.governance-report-filters label{display:grid;gap:6px;min-width:150px;color:#9aabc2;font-size:10px}
+.governance-report-filters input{padding:9px;border:1px solid #2c3c53;border-radius:5px;background:#09111d;color:#dce7f7;font:inherit;color-scheme:dark}
+.governance-report-filters>span{margin-left:auto;padding-bottom:9px;color:#8292a9;font-size:9px}
+.governance-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px;margin:4px 0 14px}
+.governance-kpis article{display:grid;gap:7px;min-width:0;padding:13px;background:#101c2c;border:1px solid #26364b;border-radius:7px}
+.governance-kpis article span{font-size:8px;letter-spacing:.08em;color:#8497b1}.governance-kpis article strong{font-size:23px;line-height:1;color:#e4edf9;font-variant-numeric:tabular-nums}.governance-kpis article small{font-size:9px;color:#8497b1;line-height:1.4}
+.governance-report-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.governance-distribution{padding:13px;background:#101c2c;border:1px solid #26364b;border-radius:7px;min-width:0}
+.governance-distribution h3,.governance-recent-activity h3{font-size:11px;color:#dce7f7;margin:0 0 12px}
+.governance-bar-row{display:grid;gap:5px;margin:10px 0}.governance-bar-row>div:first-child{display:flex;justify-content:space-between;gap:8px;color:#9aabc2;font-size:9px;text-transform:capitalize}.governance-bar-row strong{color:#dce7f7;font-variant-numeric:tabular-nums}
+.governance-bar-track{height:6px;background:#1b2a3d;border-radius:99px;overflow:hidden}.governance-bar-track i{display:block;height:100%;background:#648db8;border-radius:99px;min-width:2px}
+.governance-recent-activity{margin-top:10px;padding:14px;background:#101c2c;border:1px solid #26364b;border-radius:7px}
+.governance-recent-activity>div:first-child{display:flex;align-items:baseline;justify-content:space-between;gap:8px}.governance-recent-activity>div:first-child span{font-size:9px;color:#8292a9}
+.governance-activity-list{display:grid;gap:0}.governance-activity-list article{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 12px;padding:10px 0;border-top:1px solid #26364b}.governance-activity-list article strong{font-size:10px;color:#dce7f7}.governance-activity-list article span{font-size:9px;color:#9aabc2;text-align:right}.governance-activity-list article small{grid-column:1/-1;font-size:9px;color:#8292a9}
+.governance-report-caveat,.governance-no-data{font-size:9px;color:#8292a9;line-height:1.6}.governance-report-caveat{margin:12px 0 0}.governance-report-error{font-size:10px;color:#ffb1ad}
+@media(max-width:850px){.governance-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:600px){.governance-report-panel{padding:14px}.governance-report-heading{align-items:flex-start;flex-direction:column}.governance-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.governance-report-grid{grid-template-columns:1fr}.governance-report-filters{align-items:stretch}.governance-report-filters label{flex:1;min-width:120px}.governance-report-filters>span{width:100%;margin-left:0}.governance-recent-activity>div:first-child{align-items:flex-start;flex-direction:column}}
