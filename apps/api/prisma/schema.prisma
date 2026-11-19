@@ -60,6 +60,21 @@ enum RiskLevel {
   CRITICAL
 }
 
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum IncidentStatus {
+  OPEN
+  TRIAGED
+  INVESTIGATING
+  RESOLVED
+  CLOSED
+}
+
 model Organization {
   id          String       @id @default(cuid())
   name        String
@@ -74,6 +89,7 @@ model Organization {
   auditChainHead AuditChainHead?
   riskAssessments RiskAssessment[]
   evidenceFiles EvidenceFile[]
+  incidents Incident[]
 
   @@index([isActive])
 }
@@ -110,6 +126,8 @@ model Membership {
   riskAssessmentsReviewed RiskAssessment[] @relation("RiskAssessmentReviewer")
   evidenceFilesCreated EvidenceFile[] @relation("EvidenceFileCreator")
   evidenceFilesVerified EvidenceFile[] @relation("EvidenceFileVerifier")
+  incidentsCreated Incident[] @relation("IncidentCreator")
+  incidentsAssigned Incident[] @relation("IncidentAssignee")
 
   @@unique([userId, organizationId])
   @@index([organizationId, role])
@@ -153,6 +171,7 @@ model AIAsset {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   owner          Membership? @relation("AssetOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   riskAssessments RiskAssessment[]
+  incidents Incident[]
 
   @@index([organizationId, status])
   @@index([organizationId, assetType])
@@ -225,6 +244,35 @@ model RiskAssessment {
   @@index([organizationId, residualLevel])
   @@index([assetId, createdAt])
   @@index([createdByMembershipId])
+}
+
+
+model Incident {
+  id                    String           @id @default(cuid())
+  organizationId        String
+  assetId               String?
+  createdByMembershipId String
+  assignedToMembershipId String?
+  title                 String
+  description           String
+  severity              IncidentSeverity
+  status                IncidentStatus   @default(OPEN)
+  source                String?
+  occurredAt            DateTime         @default(now())
+  resolution            String?
+  resolvedAt            DateTime?
+  closedAt              DateTime?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  organization          Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  asset                 AIAsset?         @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  createdByMembership   Membership      @relation("IncidentCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  assignedToMembership Membership?     @relation("IncidentAssignee", fields: [assignedToMembershipId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, status, createdAt])
+  @@index([organizationId, severity, createdAt])
+  @@index([assetId, createdAt])
+  @@index([assignedToMembershipId, status])
 }
 
 model EvidenceFile {
