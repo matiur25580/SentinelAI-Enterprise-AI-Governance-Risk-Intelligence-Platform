@@ -372,4 +372,24 @@ test("register, login, refresh rotation, and logout work against PostgreSQL", { 
     body: { refreshToken: refresh.data.refreshToken },
   });
   assert.equal(loggedOutRefresh.response.status, 401, "A logged-out refresh token must be rejected.");
+
+  const rateLimitResults = [];
+  for (let attempt = 0; attempt < 15; attempt += 1) {
+    rateLimitResults.push(await request("/auth/login", {
+      method: "POST",
+      body: { email, password: "Rate-Limit-Probe-Password!" },
+    }));
+  }
+  const blockedAttempt = rateLimitResults.findIndex((result) => result.response.status === 429);
+  assert.ok(
+    blockedAttempt >= 0 && blockedAttempt <= 10,
+    `A login request must be rate limited after no more than 10 attempts in the shared 15-minute window. Observed: ${rateLimitResults.map((result) => `${result.response.status}:${result.response.headers.get("ratelimit-remaining") ?? "no-header"}`).join(", ")}`,
+  );
+  assert.ok(
+    rateLimitResults.slice(0, blockedAttempt).every((result) => result.response.status === 401),
+    "Requests before the rate limit must be processed normally.",
+  );
+  assert.ok(Number(rateLimitResults[blockedAttempt].response.headers.get("retry-after")) > 0);
+  assert.equal(rateLimitResults[blockedAttempt].data.statusCode, 429);
+
 });
