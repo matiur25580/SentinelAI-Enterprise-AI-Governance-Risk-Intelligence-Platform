@@ -213,3 +213,5 @@
 .account-action-link:hover,.risk-forgot-password:hover{text-decoration:underline}
 .risk-forgot-password{margin:12px 0 4px}
 @media(max-width:520px){.account-action-card{padding:24px 20px}}
+
+.risk-login-links{display:flex;flex-wrap:wrap;gap:2px 12px;margin-top:7px}.risk-login-links .risk-forgot-password{margin:6px 0 2px}

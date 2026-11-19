@@ -104,7 +104,7 @@ export class AuthService {
 
     if (this.requireEmailVerification) {
       await this.accountLifecycle.issueEmailVerification(result.user.id);
-      return { emailVerificationRequired: true, message: "Check your email for a verification link before signing in." };
+      return { emailVerificationRequired: true, message: "If the account is eligible, a verification email with next steps will be sent." };
     }
 
     return this.issueTokens(result.user, result.organization, result.membership);
