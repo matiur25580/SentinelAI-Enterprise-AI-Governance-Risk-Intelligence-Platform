@@ -114,9 +114,9 @@ export default function RiskAssessmentsPage() {
       const intent = await api("/risk-assessments/" + detail.id + "/evidence/upload-intents", { method: "POST", body: JSON.stringify({ fileName: file.name, contentType: file.type, sizeBytes: file.size, checksumSha256 }) });
       const uploaded = await fetch(intent.upload.url, { method: "PUT", headers: intent.upload.headers, body: file });
       if (!uploaded.ok) throw new Error("Private object storage rejected the upload (" + uploaded.status + ").");
-      await api("/risk-assessments/" + detail.id + "/evidence/" + intent.evidence.id + "/complete", { method: "POST" });
+      const completed = await api("/risk-assessments/" + detail.id + "/evidence/" + intent.evidence.id + "/complete", { method: "POST" });
       setEvidenceFiles(await api("/risk-assessments/" + detail.id + "/evidence"));
-      setMessage("Evidence uploaded and checksum verified. Independent human review is still required.");
+      setMessage(completed.status === "QUARANTINED" ? "Malware detected. The evidence file has been quarantined and is unavailable for review or download." : "Evidence passed file validation and ClamAV scanning. Independent human review is still required.");
     } catch (err) { setError(err instanceof Error ? err.message : "Evidence upload failed."); }
     finally { setEvidenceBusy(false); event.target.value = ""; }
   }
