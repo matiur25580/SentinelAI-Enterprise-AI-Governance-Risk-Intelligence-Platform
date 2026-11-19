@@ -302,7 +302,7 @@ export class EvidenceStorageService {
       select: { id: true, status: true },
     });
     if (!evidence) throw new NotFoundException("Evidence file was not found.");
-    if ([EvidenceFileStatus.PURGED, EvidenceFileStatus.PENDING_UPLOAD].includes(evidence.status)) {
+    if (evidence.status === EvidenceFileStatus.PURGED || evidence.status === EvidenceFileStatus.PENDING_UPLOAD) {
       throw new ConflictException("A legal hold can only be placed on uploaded evidence that has not been purged.");
     }
     return this.prisma.$transaction(async (tx) => {
