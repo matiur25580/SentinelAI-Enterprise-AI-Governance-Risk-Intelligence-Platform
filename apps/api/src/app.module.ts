@@ -8,6 +8,7 @@ import { AuditLogsModule } from "./audit-logs/audit-logs.module.js";
 import { RiskAssessmentsModule } from "./risk-assessments/risk-assessments.module.js";
 import { EvidenceModule } from "./evidence/evidence.module.js";
 import { IncidentsModule } from "./incidents/incidents.module.js";
+import { GovernanceReportsModule } from "./governance-reports/governance-reports.module.js";
 import { HealthController } from "./health.controller.js";
 import { MetricsController } from "./observability/metrics.controller.js";
 import { PrismaModule } from "./prisma/prisma.module.js";
@@ -27,6 +28,7 @@ import { AuthRateLimitMiddleware } from "./security/auth-rate-limit.middleware.j
     RiskAssessmentsModule,
     EvidenceModule,
     IncidentsModule,
+    GovernanceReportsModule,
   ],
   controllers: [HealthController, MetricsController],
   providers: [AuthRateLimitMiddleware],
