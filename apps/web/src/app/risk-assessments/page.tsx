@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useCallback, useEffect, useState } from "react";
+import IncidentsPanel from "./incidents-panel";
 
 type Asset = { id: string; name: string; assetType: string };
 type Assessment = {
@@ -303,7 +304,7 @@ export default function RiskAssessmentsPage() {
   const counts = { open: items.filter(x => x.status === "DRAFT" || x.status === "IN_REVIEW").length, critical: items.filter(x => x.residualLevel === "CRITICAL").length, approved: items.filter(x => x.status === "APPROVED").length };
 
   return <main className="risk-shell">
-    <header className="risk-header"><a className="risk-brand" href="/"><span className="risk-logo">S</span><span>sentinel<span>ai</span><small>GOVERNANCE PLATFORM</small></span></a><nav><a href="/">Overview</a><a className="selected" href="/risk-assessments">Risk intelligence</a>{token && <><a href="#sessions">Security sessions</a><a href="#audit-logs">Audit trail</a></>}</nav><span className="risk-env"><i /> SECURE WORKSPACE</span></header>
+    <header className="risk-header"><a className="risk-brand" href="/"><span className="risk-logo">S</span><span>sentinel<span>ai</span><small>GOVERNANCE PLATFORM</small></span></a><nav><a href="/">Overview</a><a className="selected" href="/risk-assessments">Risk intelligence</a>{token && <><a href="#sessions">Security sessions</a><a href="#incidents">Incidents</a><a href="#audit-logs">Audit trail</a></>}</nav><span className="risk-env"><i /> SECURE WORKSPACE</span></header>
     <section className="risk-content">
       <div className="risk-heading"><div><div className="risk-kicker">GOVERNANCE / RISK INTELLIGENCE</div><h1>Risk assessment console</h1><p>Evidence-backed risk reviews, independent decisions, and traceable governance.</p></div>{profile && <div className="risk-user"><strong>{profile.user.name}</strong><span>{profile.organization.name} · {profile.role.replaceAll("_", " ")}</span><button onClick={() => { setToken(""); setProfile(null); setItems([]); setAssets([]); }}>Sign out</button></div>}</div>
       {!token ? <section className="risk-login"><div className="risk-login-mark">↗</div><h2>Sign in to your workspace</h2><p>Use your SentinelAI account to view organization-scoped assessments.</p><form onSubmit={login}><label>Email address<input type="email" required autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} /></label><label>Password<input type="password" required minLength={12} autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} /></label><label>Workspace slug <span>(if required)</span><input value={workspace} onChange={e => setWorkspace(e.target.value)} /></label><button className="risk-primary" disabled={busy}>{busy ? "Signing in…" : "Sign in securely"}</button></form><small>API endpoint: {API}</small></section> :
@@ -324,6 +325,7 @@ export default function RiskAssessmentsPage() {
           </article>)}</div> : <div className="session-empty"><strong>No active sessions found</strong><span>Refresh to check again. Your current session may have expired.</span></div>}
           <p className="session-note">Revocation invalidates the session’s refresh-token family and associated access tokens immediately. The action is recorded in the organization audit log.</p>
         </section>
+        <IncidentsPanel api={api} assets={assets} />
         <section className="audit-panel" id="audit-logs">
           <div className="audit-heading"><div><div className="risk-kicker">GOVERNANCE / ACCOUNTABILITY</div><h2>Immutable audit trail</h2><p>Organization-scoped events with chain sequence, actor attribution, and integrity verification.</p></div><div className="audit-actions"><button className="session-refresh" disabled={auditBusy} onClick={verifyAuditIntegrity}>Verify chain</button><button className="session-refresh" disabled={auditBusy} onClick={exportAuditCsv}>Export CSV</button></div></div>
           {auditIntegrity && <div className={"audit-integrity " + (auditIntegrity.verified ? "verified" : "failed")} role="status"><strong>{auditIntegrity.verified ? "Chain verified" : "Integrity check failed"}</strong><span>{auditIntegrity.recordsChecked.toLocaleString()} records checked{auditIntegrity.reason ? " · " + auditIntegrity.reason : ""}</span></div>}
