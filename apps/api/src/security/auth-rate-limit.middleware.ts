@@ -28,7 +28,9 @@ export class AuthRateLimitMiddleware implements NestMiddleware {
       return;
     }
 
-    const action = match ? match[1] : `${accountAction[1].startsWith("email") ? "email-verification" : "password"}-${accountAction[2] ?? accountAction[3]}`;
+    const accountRoute = accountAction?.[1] ?? "";
+    const accountVerb = accountAction?.[2] ?? accountAction?.[3] ?? "";
+    const action = match?.[1] ?? `${accountRoute.startsWith("email") ? "email-verification" : "password"}-${accountVerb}`;
     const limit = LIMITS[action];
     const clientIp = request.ip || request.socket.remoteAddress || "unknown";
     // Hash the IP-derived identifier: the database stores no raw client addresses.
