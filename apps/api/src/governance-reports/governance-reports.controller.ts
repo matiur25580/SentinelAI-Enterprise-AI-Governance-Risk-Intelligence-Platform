@@ -42,14 +42,14 @@ export class GovernanceReportsController {
   async exportAuditPackage(
     @CurrentUser() user: AuthenticatedUser,
     @Query() query: GovernanceReportQueryDto,
-    @Res({ passthrough: true }) response: Response,
-  ) {
+    @Res() response: Response,
+  ): Promise<void> {
     const archive = await this.service.exportAuditPackage(user, query);
     response.setHeader("Content-Type", "application/zip");
     response.setHeader("Content-Disposition", 'attachment; filename="sentinelai-governance-audit-package.zip"');
     response.setHeader("Content-Length", archive.length);
     response.setHeader("Cache-Control", "no-store");
     response.setHeader("X-Content-Type-Options", "nosniff");
-    return archive;
+    response.send(archive);
   }
 }
