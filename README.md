@@ -88,6 +88,7 @@ infrastructure/ Deployment infrastructure (upcoming)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Security baseline](docs/SECURITY.md)
 - [Production deployment readiness](docs/PRODUCTION_DEPLOYMENT.md)
+- [Local Prometheus, Alertmanager, and Grafana stack](docs/LOCAL_MONITORING.md)
 - [Development roadmap](docs/ROADMAP.md)
 
 ## Security principles
