@@ -48,6 +48,7 @@ enum EvidenceFileStatus {
   PENDING_UPLOAD
   UPLOADED
   QUARANTINED
+  PURGED
   VERIFIED
   REJECTED
 }
