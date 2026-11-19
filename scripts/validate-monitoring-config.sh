@@ -10,7 +10,8 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 temp_dir="$(mktemp -d)"
 trap 'rm -rf "$temp_dir"' EXIT
 
-mkdir -p "$temp_dir/rules"
+mkdir -p "$temp_dir/rules" "$temp_dir/secrets"
+printf 'ci-only-placeholder-token-not-a-secret\n' > "$temp_dir/secrets/sentinelai-metrics-token"
 cp "$repo_root/ops/prometheus/alerts.yml" "$temp_dir/rules/alerts.yml"
 
 echo "Validating Prometheus scrape configuration and alert rules..."
@@ -18,6 +19,7 @@ docker run --rm --pull=missing \
   --entrypoint promtool \
   -v "$repo_root:/workspace:ro" \
   -v "$temp_dir/rules:/etc/prometheus/rules:ro" \
+  -v "$temp_dir/secrets:/etc/prometheus/secrets:ro" \
   prom/prometheus:v3.5.0 \
   check config /workspace/ops/prometheus/prometheus.example.yml
 
