@@ -116,6 +116,12 @@ test("register, login, refresh rotation, and logout work against PostgreSQL", { 
     assert.equal(secondaryProfile.data.organization.id, secondOrganizationId);
     assert.equal(secondaryProfile.data.organization.name, "SentinelAI Secondary Workspace");
     assert.notEqual(secondaryProfile.data.organization.id, profile.data.organization.id);
+    // Use an authorized role so the cross-tenant update test reaches the
+    // tenant-scoped service and verifies its 404 non-disclosure behavior.
+    await database.query(
+      'UPDATE "Membership" SET "role" = \'OWNER\', "updatedAt" = NOW() WHERE "id" = $1',
+      [secondMembershipId],
+    );
 
     // Auditors can read only their own workspace's compliance history.
     await database.query('UPDATE "Membership" SET "role" = \'AUDITOR\', "updatedAt" = NOW() WHERE "id" = $1', [secondMembershipId]);
