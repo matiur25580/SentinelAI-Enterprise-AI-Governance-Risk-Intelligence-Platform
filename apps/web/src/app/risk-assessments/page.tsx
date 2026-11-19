@@ -12,7 +12,7 @@ type Assessment = {
   createdByMembership?: { user: { name: string } }; reviewedByMembership?: { user: { name: string } } | null;
 };
 type Profile = { user: { name: string }; organization: { name: string }; role: string };
-type EvidenceFile = { id: string; originalFileName: string; contentType: string; sizeBytes: string; checksumSha256: string; status: "PENDING_UPLOAD" | "UPLOADED" | "VERIFIED" | "REJECTED"; createdAt: string; uploadedAt?: string | null; verifiedAt?: string | null; verificationNote?: string | null; createdByMembership?: { user: { name: string } }; verifiedByMembership?: { user: { name: string } } | null };
+type EvidenceFile = { id: string; originalFileName: string; contentType: string; sizeBytes: string; checksumSha256: string; status: "PENDING_UPLOAD" | "UPLOADED" | "QUARANTINED" | "VERIFIED" | "REJECTED"; createdAt: string; uploadedAt?: string | null; verifiedAt?: string | null; verificationNote?: string | null; createdByMembership?: { user: { name: string } }; verifiedByMembership?: { user: { name: string } } | null };
 type FormState = { assetId: string; title: string; scope: string; intendedUse: string; dataSensitivity: number; autonomyLevel: number; impact: number; likelihood: number; exposure: number; mitigationCoverage: number; evidenceText: string };
 const API = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1").replace(/\/$/, "");
 const initialForm: FormState = { assetId: "", title: "", scope: "", intendedUse: "", dataSensitivity: 3, autonomyLevel: 2, impact: 3, likelihood: 3, exposure: 3, mitigationCoverage: 0, evidenceText: "" };
@@ -114,9 +114,9 @@ export default function RiskAssessmentsPage() {
       const intent = await api("/risk-assessments/" + detail.id + "/evidence/upload-intents", { method: "POST", body: JSON.stringify({ fileName: file.name, contentType: file.type, sizeBytes: file.size, checksumSha256 }) });
       const uploaded = await fetch(intent.upload.url, { method: "PUT", headers: intent.upload.headers, body: file });
       if (!uploaded.ok) throw new Error("Private object storage rejected the upload (" + uploaded.status + ").");
-      await api("/risk-assessments/" + detail.id + "/evidence/" + intent.evidence.id + "/complete", { method: "POST" });
+      const completed = await api("/risk-assessments/" + detail.id + "/evidence/" + intent.evidence.id + "/complete", { method: "POST" });
       setEvidenceFiles(await api("/risk-assessments/" + detail.id + "/evidence"));
-      setMessage("Evidence uploaded and checksum verified. Independent human review is still required.");
+      setMessage(completed.status === "QUARANTINED" ? "Malware detected. The evidence file has been quarantined and is unavailable for review or download." : "Evidence passed file validation and ClamAV scanning. Independent human review is still required.");
     } catch (err) { setError(err instanceof Error ? err.message : "Evidence upload failed."); }
     finally { setEvidenceBusy(false); event.target.value = ""; }
   }
