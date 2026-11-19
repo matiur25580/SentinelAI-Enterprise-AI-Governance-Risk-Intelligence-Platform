@@ -9,11 +9,13 @@ async function bootstrap() {
     origin: process.env.WEB_ORIGIN?.split(",") ?? ["http://localhost:3000"],
     credentials: true,
   });
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: true,
-    transform: true,
-  }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
   const port = Number(process.env.API_PORT ?? 4000);
   await app.listen(port, "0.0.0.0");
 }
