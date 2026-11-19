@@ -47,6 +47,7 @@ enum RiskAssessmentStatus {
 enum EvidenceFileStatus {
   PENDING_UPLOAD
   UPLOADED
+  QUARANTINED
   VERIFIED
   REJECTED
 }
