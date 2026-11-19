@@ -55,6 +55,16 @@ jobs:
         run: docker build --pull -f Dockerfile.api -t sentinelai-api:ci .
       - name: Build web production container image
         run: docker build --pull -f Dockerfile.web -t sentinelai-web:ci .
+      - name: Scan production images and generate SBOMs
+        run: bash scripts/scan-container-images.sh
+      - name: Upload container SBOM artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sentinelai-container-sboms
+          path: artifacts/container-sbom/*.cdx.json
+          if-no-files-found: warn
+          retention-days: 30
       - name: Run authentication integration tests
         run: pnpm --filter @sentinelai/api test:integration
       - name: Test production deployment smoke checks

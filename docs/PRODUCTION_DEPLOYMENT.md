@@ -20,7 +20,7 @@ docker build --pull -f Dockerfile.api -t sentinelai-api:<git-sha> .
 docker build --pull -f Dockerfile.web -t sentinelai-web:<git-sha> .
 ```
 
-The API image uses a multi-stage build, installs only API production dependencies in its runtime stage, includes the generated Prisma client, runs as the unprivileged `node` user, and exposes port 4000 by default. Its built-in health check calls the liveness endpoint. The web image uses Next.js standalone output, runs as the unprivileged `node` user, and exposes port 3000. Both images use Node.js 22 and pnpm 9.15.4 for reproducible workspace builds. CI builds both images on every pull request; it does not publish or deploy them.
+The API image uses a multi-stage build, installs only API production dependencies in its runtime stage, includes the generated Prisma client, runs as the unprivileged `node` user, removes the unused bundled npm CLI from the runtime image, and exposes port 4000 by default. Its built-in health check calls the liveness endpoint. The web image uses Next.js standalone output, runs as the unprivileged `node` user, removes the unused bundled npm CLI from the runtime image, and exposes port 3000. Both images use Node.js 22 and pnpm 9.15.4 for reproducible workspace builds. CI builds both images on every pull request; it does not publish or deploy them.
 
 Supply API configuration through the hosting platform's secret manager (or a protected env file outside the repository). At minimum, configure `NODE_ENV=production`, `API_PORT`, `DATABASE_URL`, independent `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET`, and `WEB_ORIGIN`. Set `TRUST_PROXY_HOPS` only when the exact trusted proxy chain is known. Do not bake secrets into image build arguments or image layers.
 
@@ -37,6 +37,14 @@ docker run -d --name sentinelai-web \
 These commands assume the API's PostgreSQL host in `DATABASE_URL` is reachable from the container. In a real deployment, attach both services to the provider's private network, route public HTTPS traffic through its managed ingress/reverse proxy, and restrict direct API/database access. The web container currently has no provider-specific API URL wiring; configure the frontend/API origin in the hosting architecture before enabling real user flows.
 
 Database migrations are deliberately not run by API container startup. Run `pnpm db:deploy` exactly once as a controlled release step from the reviewed source revision with the production `DATABASE_URL`, before routing traffic. Do not run migrations from every API replica. The runtime API image omits the Prisma CLI and migration source tree.
+
+CI scans both locally built production images with Trivy 0.58.1 and fails on fixable HIGH or CRITICAL vulnerability findings. The scan also generates CycloneDX SBOM files for the API and web images and uploads them as the `sentinelai-container-sboms` workflow artifact for 30 days. Run the same check locally after building both `sentinelai-api:ci` and `sentinelai-web:ci`:
+
+```bash
+bash scripts/scan-container-images.sh
+```
+
+The scan uses the current Trivy vulnerability database; results can change as that database is updated. `--ignore-unfixed` avoids blocking on findings without an available fix, not on fixable high-severity issues. Review SBOMs and vulnerability results for each release; this CI check is not a substitute for rescanning images in the registry or monitoring newly disclosed vulnerabilities.
 
 Use immutable commit-SHA image tags for releases, scan images in the chosen registry, and retain the previous known-good image for rollback. These Dockerfiles are build artifacts only: no registry, hosting service, database, DNS, TLS certificate, or production secret has been configured by this repository.
 
