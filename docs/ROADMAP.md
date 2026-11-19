@@ -1,36 +1,81 @@
 # Development Roadmap
 
-## Milestone 1 — Foundation
-- [x] Repository documentation and workspace conventions
-- [x] Local PostgreSQL and Redis services
-- [x] Environment variable template and ignore rules
-- [ ] Web, API, and AI-engine starter applications
-- [ ] CI checks and health endpoints
+This roadmap reflects the repository implementation on `main`. A checked item means the capability exists in code and/or CI; it does **not** imply that a production environment has been provisioned or that an external certification has been achieved.
 
-## Milestone 2 — Identity and tenancy
-- [ ] Authentication and refresh-token rotation
-- [ ] Organizations, memberships, roles, permissions
-- [ ] Tenant isolation tests and audit events
+## Milestone 1 — Engineering foundation
+
+- [x] pnpm monorepo, workspace conventions and repository documentation
+- [x] Local PostgreSQL and Redis development services
+- [x] Environment template, startup validation and secret-file ignore rules
+- [x] Next.js web application, NestJS API and FastAPI AI-engine starter
+- [x] Health/readiness endpoints and GitHub Actions quality/security workflows
+- [x] Provider-neutral API and web container images built in CI
+
+## Milestone 2 — Identity, tenancy and access control
+
+- [x] Authentication with access tokens and rotating, hashed refresh tokens
+- [x] Organization membership, role-based access and organization-scoped data access
+- [x] Audited session listing and immediate session-family revocation
+- [x] Shared database-backed authentication rate limiting
+- [x] Append-only audit events for security-sensitive operations
+- [ ] Email verification, password recovery and secure administrator bootstrap
+- [ ] Complete cross-tenant authorization test matrix for every protected module
 
 ## Milestone 3 — AI governance core
-- [ ] AI asset registry and version history
-- [ ] Configurable risk assessments with evidence
-- [ ] Policy lifecycle and approval workflows
 
-## Milestone 4 — Evaluation and security
-- [ ] Evaluation datasets and benchmark runs
-- [ ] Provider adapters and cost-aware execution
-- [ ] Authorized prompt-injection and data-exposure test suite
+- [x] Organization-scoped AI asset inventory
+- [x] Versioned, evidence-backed AI risk assessments
+- [x] Draft, submission, independent review, approval and rejection workflow
+- [x] Reviewer rationale and protection against self-approval
+- [x] Private evidence upload/download workflow with SHA-256 verification
+- [x] Evidence malware scanning, quarantine, rescan, release and audited purge
+- [x] Evidence retention metadata and legal holds
+- [x] Indicative NIST AI RMF / ISO/IEC 42001 evidence crosswalk
+- [ ] Policy authoring, versioning, approval and attestation lifecycle
+- [ ] AI asset model/version history and change-impact tracking
 
-## Milestone 5 — Operations
-- [ ] Usage and latency observability
-- [x] Incidents: tenant-scoped intake, severity triage, controlled lifecycle, and audit events
-- [ ] Notifications and human review
-- [x] Auditor audit-trail filtering, integrity verification, and CSV export
-- [x] Executive governance and compliance reporting (organization-scoped metrics, date filters, audit activity, CSV export)
-- [x] Downloadable governance audit package (PDF, JSON and CSV ZIP export with tenant scoping, export audit event and integrity metadata)
+## Milestone 4 — Evaluation and AI-specific security
+
+- [ ] Evaluation datasets, benchmark definitions and reproducible runs
+- [ ] Authenticated AI-engine execution API and provider adapters
+- [ ] Cost-aware evaluation execution, usage limits and result provenance
+- [ ] Authorized prompt-injection, data-exposure and model-behavior test suite
+- [ ] Human review and remediation workflow for evaluation findings
+
+## Milestone 5 — Operations and accountability
+
+- [x] Structured request logging, request IDs and API metrics endpoint
+- [x] Tenant-scoped AI incident intake, severity triage and controlled lifecycle
+- [x] Organization audit-trail explorer, filtering, integrity verification and CSV export
+- [x] Executive governance reporting with date filters and risk/incident/evidence summaries
+- [x] Downloadable governance audit package (PDF, JSON and CSV in ZIP)
+- [x] Retention cleanup workflow and operational runbook
+- [x] Prometheus/Alertmanager configuration examples and validation in CI
+- [ ] Notification delivery, alert routing and human-review assignments
+- [ ] Centralized production logs, metrics, traces and tested alert destinations
 
 ## Milestone 6 — Production readiness
-- [ ] Automated tests and CI/CD
-- [ ] Backups, monitoring, alerting, and recovery runbooks
-- [ ] Deployment guides and demo environment
+
+- [x] API integration tests for implemented authentication, governance and security workflows
+- [x] CI checks for type safety, migrations, workspace build, container builds, image scanning, CodeQL and dependency auditing
+- [x] Deployment, backup/recovery, evidence-storage and monitoring runbooks
+- [ ] Provision and validate a real hosting environment, production database and private object-storage bucket
+- [ ] Configure production secrets, malware scanner, scheduled retention and alert destinations
+- [ ] Perform backup restoration drills, migration rehearsal and disaster-recovery validation
+- [ ] Add browser-level end-to-end coverage and expand authorization regression coverage
+- [ ] Run load/performance testing and independent security assessment
+- [ ] Publish a controlled demo environment with non-sensitive sample data
+
+## Current delivery boundary
+
+SentinelAI is an actively developed engineering project, not a production-operated SaaS service. Repository code and passing CI do not prove that hosting, production credentials, a database, object storage, ClamAV, scheduled jobs, Prometheus, Alertmanager, backups or alert routing are configured and running. The AI-engine application is currently a starter/health-metadata service, not an authenticated inference or evaluation platform.
+
+Risk scores are generated by a documented project-specific heuristic. The compliance crosswalk is an indicative evidence-mapping aid; neither is an official certification, legal opinion, or proof of regulatory conformity.
+
+## Recommended implementation order
+
+1. Complete account lifecycle security (verification, recovery and administrator bootstrap).
+2. Build policy lifecycle and attestation workflows linked to AI assets and assessments.
+3. Implement the authenticated AI evaluation boundary, datasets and reproducible benchmark runs.
+4. Expand tenant-isolation and browser-level end-to-end coverage.
+5. Provision and validate production infrastructure, observability, backups and recovery.
