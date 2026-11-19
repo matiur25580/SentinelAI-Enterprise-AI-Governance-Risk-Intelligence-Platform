@@ -14,7 +14,10 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "infra:up": "docker compose up -d postgres redis",
-    "infra:down": "docker compose down"
+    "infra:down": "docker compose down",
+    "db:generate": "pnpm --filter @sentinelai/api db:generate",
+    "db:migrate": "pnpm --filter @sentinelai/api db:migrate",
+    "db:deploy": "pnpm --filter @sentinelai/api db:deploy"
   },
   "devDependencies": {
     "prettier": "^3.4.2",
