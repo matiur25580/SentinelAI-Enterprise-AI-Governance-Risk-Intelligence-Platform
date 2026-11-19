@@ -51,6 +51,12 @@ docker run --rm --pull=missing \
   prom/alertmanager:v0.28.1 \
   check-config /etc/alertmanager/alertmanager.yml
 
+docker run --rm --pull=missing \
+  --entrypoint amtool \
+  -v "$repo_root/ops/prometheus/alertmanager.webhook.example.yml:/etc/alertmanager/alertmanager.yml:ro" \
+  prom/alertmanager:v0.28.1 \
+  check-config /etc/alertmanager/alertmanager.yml
+
 echo "Validating local monitoring Compose overlay..."
 GRAFANA_ADMIN_PASSWORD=ci-only-placeholder-password \
   docker compose \
