@@ -20,6 +20,7 @@ interface RefreshPayload {
   jti: string;
   organizationId: string;
   membershipId: string;
+  familyId: string;
 }
 
 @Injectable()
@@ -173,13 +174,9 @@ export class AuthService {
       stored.userId !== payload.sub ||
       stored.membershipId !== payload.membershipId ||
       stored.organizationId !== payload.organizationId ||
-      stored.revokedAt ||
-      stored.expiresAt <= new Date() ||
-      !stored.user.isActive ||
-      !stored.organization.isActive ||
-      !stored.membership.isActive
+      stored.familyId !== payload.familyId
     ) {
-      throw new UnauthorizedException("Refresh token has been revoked or expired.");
+      throw new UnauthorizedException("Refresh token is invalid.");
     }
 
     const tokenMatches = await argon2.verify(stored.tokenHash, dto.refreshToken).catch(() => false);
@@ -187,15 +184,37 @@ export class AuthService {
       throw new UnauthorizedException("Refresh token is invalid.");
     }
 
+    if (stored.revokedAt) {
+      // A previously rotated token was replayed: revoke every token in this session family.
+      await this.prisma.refreshToken.updateMany({
+        where: { familyId: stored.familyId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      throw new UnauthorizedException("Refresh token reuse detected; this session has been revoked.");
+    }
+
+    if (
+      stored.expiresAt <= new Date() ||
+      !stored.user.isActive ||
+      !stored.organization.isActive ||
+      !stored.membership.isActive
+    ) {
+      throw new UnauthorizedException("Refresh token has expired or its account is inactive.");
+    }
+
     const rotation = await this.prisma.refreshToken.updateMany({
       where: { id: stored.id, revokedAt: null },
       data: { revokedAt: new Date() },
     });
     if (rotation.count !== 1) {
-      throw new UnauthorizedException("Refresh token has already been used.");
+      await this.prisma.refreshToken.updateMany({
+        where: { familyId: stored.familyId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      throw new UnauthorizedException("Refresh token reuse detected; this session has been revoked.");
     }
 
-    return this.issueTokens(stored.user, stored.organization, stored.membership);
+    return this.issueTokens(stored.user, stored.organization, stored.membership, stored.familyId);
   }
 
   async logout(dto: RefreshDto) {
@@ -203,9 +222,9 @@ export class AuthService {
       const payload = await this.jwtService.verifyAsync<RefreshPayload>(dto.refreshToken, {
         secret: this.refreshSecret,
       });
-      if (payload.jti) {
+      if (payload.familyId) {
         await this.prisma.refreshToken.updateMany({
-          where: { jti: payload.jti, revokedAt: null },
+          where: { familyId: payload.familyId, revokedAt: null },
           data: { revokedAt: new Date() },
         });
       }
@@ -246,6 +265,7 @@ export class AuthService {
     user: { id: string; email: string },
     organization: { id: string },
     membership: { id: string; role: MembershipRole },
+    familyId = randomUUID(),
   ) {
     const accessPayload: AuthenticatedUser = {
       sub: user.id,
@@ -260,6 +280,7 @@ export class AuthService {
       jti,
       organizationId: organization.id,
       membershipId: membership.id,
+      familyId,
     };
 
     const [accessToken, refreshToken] = await Promise.all([
@@ -276,6 +297,7 @@ export class AuthService {
     await this.prisma.refreshToken.create({
       data: {
         jti,
+        familyId,
         tokenHash: await argon2.hash(refreshToken),
         userId: user.id,
         organizationId: organization.id,
