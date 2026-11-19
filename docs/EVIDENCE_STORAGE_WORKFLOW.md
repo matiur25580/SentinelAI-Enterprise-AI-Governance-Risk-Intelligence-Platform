@@ -85,5 +85,6 @@ Verification body:
 - Configure object-store CORS and bucket policy separately; the API does not provision infrastructure.
 - A HEAD metadata match proves the uploaded bytes match the supplied SHA-256 checksum and declared metadata; it does not establish that the document is truthful, safe, or substantively adequate.
 - Configure `CLAMAV_HOST` and optional `CLAMAV_PORT` (default `3310`) to reach a maintained ClamAV daemon. In production, the API refuses to start with evidence storage enabled if `CLAMAV_HOST` is missing.
+- For local development, run a ClamAV daemon bound to loopback with `docker run --rm -d --name sentinelai-clamav -p 127.0.0.1:3310:3310 clamav/clamav:stable`, then set `CLAMAV_HOST=127.0.0.1` and `CLAMAV_PORT=3310`. Wait for the signature database initialization and daemon readiness before uploading evidence.
 - Keep ClamAV signatures updated and isolate the scanner on a private network. The integration suite uses a local protocol-compatible test double; it does not replace deployment validation against a real ClamAV service.
 - Full document parsing, content disarm/reconstruction, automated evidence classification, retention automation, and legal hold workflows are not implemented.
