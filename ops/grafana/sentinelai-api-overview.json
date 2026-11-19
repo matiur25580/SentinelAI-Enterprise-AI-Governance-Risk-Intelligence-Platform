@@ -220,26 +220,6 @@
     "api",
     "prometheus"
   ],
-  "templating": {
-    "list": [
-      {
-        "current": {
-          "selected": true,
-          "text": "Prometheus",
-          "value": "${DS_PROMETHEUS}"
-        },
-        "hide": 0,
-        "name": "DS_PROMETHEUS",
-        "label": "Prometheus",
-        "type": "datasource",
-        "query": "prometheus",
-        "refresh": 1,
-        "options": [],
-        "includeAll": false,
-        "multi": false
-      }
-    ]
-  },
   "time": {
     "from": "now-6h",
     "to": "now"
