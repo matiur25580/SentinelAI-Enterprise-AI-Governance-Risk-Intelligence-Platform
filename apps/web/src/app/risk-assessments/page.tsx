@@ -54,6 +54,11 @@ export default function RiskAssessmentsPage() {
     return body;
   }, [token]);
 
+  const loadSessions = useCallback(async () => {
+    const result = await api("/auth/sessions");
+    setSessions(result.data || []);
+  }, [api]);
+
   const load = useCallback(async () => {
     const params = new URLSearchParams();
     if (status) params.set("status", status);
@@ -93,11 +98,6 @@ export default function RiskAssessmentsPage() {
     } catch (err) { setError(err instanceof Error ? err.message : "Unable to sign in."); }
     finally { setBusy(false); }
   }
-
-  const loadSessions = useCallback(async () => {
-    const result = await api("/auth/sessions");
-    setSessions(result.data || []);
-  }, [api]);
 
   async function revokeSession(sessionId: string) {
     if (!window.confirm("Revoke this login session? Its access and refresh tokens will stop working immediately.")) return;
