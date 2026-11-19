@@ -3,10 +3,22 @@ const PLACEHOLDER_SECRET_PREFIXES = ["replace-", "change-this", "your-"];
 export function validateEnvironment(config: Record<string, unknown>) {
   const errors: string[] = [];
   const nodeEnv = String(config.NODE_ENV ?? "development");
-  const requireVerifiedEmail = config.AUTH_REQUIRE_VERIFIED_EMAIL === undefined
+  const authVerificationSetting = config.AUTH_REQUIRE_VERIFIED_EMAIL;
+  if (
+    authVerificationSetting !== undefined &&
+    authVerificationSetting !== true &&
+    authVerificationSetting !== false &&
+    authVerificationSetting !== "true" &&
+    authVerificationSetting !== "false"
+  ) {
+    errors.push("AUTH_REQUIRE_VERIFIED_EMAIL must be true or false.");
+  }
+  const requireVerifiedEmail = authVerificationSetting === undefined
     ? nodeEnv === "production"
-    : config.AUTH_REQUIRE_VERIFIED_EMAIL === true || config.AUTH_REQUIRE_VERIFIED_EMAIL === "true";
-  if (config.AUTH_REQUIRE_VERIFIED_EMAIL !== undefined && ![true, false, "true", "false"].includes(config.AUTH_REQUIRE_VERIFIED_EMAIL as never)) errors.push("AUTH_REQUIRE_VERIFIED_EMAIL must be true or false.");
+    : authVerificationSetting === true || authVerificationSetting === "true";
+  if (nodeEnv === "production" && !requireVerifiedEmail) {
+    errors.push("AUTH_REQUIRE_VERIFIED_EMAIL cannot be disabled in production.");
+  }
   if (requireVerifiedEmail) {
     for (const key of ["RESEND_API_KEY", "EMAIL_FROM", "APP_PUBLIC_URL"] as const) {
       if (typeof config[key] !== "string" || String(config[key]).trim().length === 0) errors.push(`${key} is required when email verification is enabled.`);
