@@ -175,7 +175,7 @@ export class EvidenceStorageService {
         metadata: { riskAssessmentId: assessmentId, expiresInSeconds: expiresSeconds },
       },
     });
-    return { url: signed.url, method: "GET", expiresInSeconds };
+    return { url: signed.url, method: "GET", expiresInSeconds: expiresSeconds };
   }
 
   async decide(auth: AuthenticatedUser, assessmentId: string, evidenceId: string, dto: VerifyEvidenceDto) {
