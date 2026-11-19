@@ -1,0 +1,45 @@
+groups:
+  - name: sentinelai-api
+    rules:
+      - alert: SentinelAIAPITargetDown
+        expr: up{job="sentinelai-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: sentinelai-api
+        annotations:
+          summary: "SentinelAI API metrics target is unavailable"
+          description: "Prometheus has been unable to scrape the SentinelAI API target for at least 2 minutes."
+
+      - alert: SentinelAIHigh5xxRate
+        expr: |
+          (
+            sum(rate(sentinelai_http_requests_total{status_code=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(sentinelai_http_requests_total[5m])), 0.001)
+          ) > 0.05
+          and
+          sum(rate(sentinelai_http_requests_total[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+          service: sentinelai-api
+        annotations:
+          summary: "SentinelAI API 5xx rate is above 5%"
+          description: "More than 5% of API requests are failing with 5xx responses over 5 minutes, with at least 0.1 requests/second."
+
+      - alert: SentinelAIHighP95Latency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(sentinelai_http_request_duration_seconds_bucket[10m]))
+          ) > 1
+          and
+          sum(rate(sentinelai_http_request_duration_seconds_count[10m])) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          service: sentinelai-api
+        annotations:
+          summary: "SentinelAI API p95 latency exceeds 1 second"
+          description: "The estimated API p95 request duration has remained above 1 second for 10 minutes with sufficient traffic."

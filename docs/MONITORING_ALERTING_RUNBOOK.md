@@ -10,7 +10,7 @@ This is a provider-neutral operations plan for SentinelAI. It documents what an 
 - Prometheus metrics: `GET /api/v1/metrics` exports in-process HTTP request counters (method, route template, status code) and latency histograms. It returns 404 unless `METRICS_BEARER_TOKEN` is configured with at least 32 characters and the matching bearer token is supplied. Scrape it over a private network and rotate the token through the hosting secret manager.
 - CI: GitHub Actions runs the repository Quality and Security workflows on their configured events.
 - PostgreSQL and Redis are defined for local development in Docker Compose. Production database/Redis monitoring must be configured in the selected provider.
-- The repository does not currently define a production metrics exporter, tracing backend, centralized log pipeline, pager integration, or alert rules. Do not assume these are enabled.
+- The repository includes starter Prometheus alert rules at `ops/prometheus/alerts.yml`. They are configuration examples only: they are not loaded by a Prometheus server, and no Alertmanager receiver or pager integration is provisioned by this repository.
 
 ## Minimum telemetry before customer traffic
 
@@ -54,6 +54,12 @@ These are conservative initial suggestions, not measured service-level objective
 | CI security checks | Required CodeQL or dependency audit fails on release candidate | Block release; triage and remediate |
 
 Avoid paging on a single transient sample. Use consecutive failures, minimum traffic thresholds, deduplication, and recovery notifications. Define severity and escalation ownership in the private on-call system.
+
+### Loading the starter Prometheus rules
+
+The checked-in `ops/prometheus/alerts.yml` contains three starter rules: scrape target down, API 5xx rate above 5%, and p95 latency above 1 second. Add the file to the Prometheus `rule_files` configuration and reload Prometheus using your platform's approved process. The scrape target must use the job label `sentinelai-api`; if your deployment uses another label, update the `up{job=...}` selector before loading.
+
+The 5xx and latency alerts include a minimum traffic guard to reduce noise on quiet services. Tune thresholds and `for` durations against measured traffic and approved SLOs. Configure Alertmanager separately with authenticated, tested receivers and escalation policies; the rule file alone does not send notifications.
 
 ## Logging and privacy
 
