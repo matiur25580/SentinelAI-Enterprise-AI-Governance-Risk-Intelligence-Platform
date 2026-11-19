@@ -368,7 +368,7 @@ nodeTest("private evidence upload, checksum validation, tenant isolation, and in
   });
   assert.equal(purged.response.status, 201, JSON.stringify(purged.data));
   assert.equal(purged.data.status, "PURGED");
-  assert.equal(storageObjects.size, 1); // Only the original verified clean evidence remains.
+  assert.equal(storageObjects.size, 2); // The original clean file and rescanned clean file remain; purged bytes are gone.
   const purgedDownload = await request(evidencePath + "/" + purgeIntent.data.evidence.id + "/download", { method: "POST", token: ownerToken });
   assert.equal(purgedDownload.response.status, 404);
 
