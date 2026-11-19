@@ -12,13 +12,13 @@ const MAX_AUDIT_EVENTS = 5_000;
 
 function csvCell(value: unknown): string {
   let text = value == null ? "" : value instanceof Date ? value.toISOString()
-    : typeof value === "object" ? JSON.stringify(value) : String(value);
+    : typeof value === "object" ? (JSON.stringify(value) ?? "") : String(value);
   if (/^[\\s]*[=+\\-@]/.test(text)) text = "'" + text;
   return `"${text.replace(/"/g, '""')}"`;
 }
 
 function toCsv(headers: string[], rows: unknown[][]): string {
-  return [headers.map(csvCell).join(","), ...rows.map(row => row.map(csvCell).join(","))].join("\\r\\n") + "\\r\\n";
+  return [headers.map(csvCell).join(","), ...rows.map(row => row.map(csvCell).join(","))].join("\r\n") + "\r\n";
 }
 
 function display(value: unknown): string {
@@ -220,6 +220,12 @@ export class GovernanceReportsService {
       verified: false, recordsChecked: 0, reason: "VERIFIER_RETURNED_NO_RESULT",
     };
 
+    report.audit.total = auditEvents.length;
+    report.audit.recentActivity = auditEvents.slice(-10).reverse().map(event => ({
+      id: event.id, action: event.action, entityType: event.entityType, entityId: event.entityId,
+      createdAt: event.createdAt, actor: event.actor,
+    }));
+
     const generatedAt = new Date().toISOString();
     const data = {
       schemaVersion: "sentinelai-governance-audit-package-v1",
@@ -290,7 +296,7 @@ export class GovernanceReportsService {
         "Contents: report.pdf, manifest.json, governance-summary.json, and CSV inventories.",
         "Sensitive evidence bytes, storage keys, signed URLs, credentials and secrets are excluded.",
         "Framework references are indicative product capability mappings, not proof of compliance.",
-      ].join("\\n") },
+      ].join("\n") },
       { name: "report.pdf", content: createReportPdf("SentinelAI Governance Audit Report", pdfLines) },
       { name: "manifest.json", content: JSON.stringify({
         schemaVersion: data.schemaVersion, generatedAt, period: report.period,
