@@ -16,7 +16,7 @@ const nextStatus: Partial<Record<Incident["status"], Incident["status"]>> = {
   OPEN: "TRIAGED", TRIAGED: "INVESTIGATING", INVESTIGATING: "RESOLVED", RESOLVED: "CLOSED",
 };
 
-export default function IncidentsPanel({ api, assets }: { api: Api; assets: Asset[] }) {
+export default function IncidentsPanel({ api, assets, canManage }: { api: Api; assets: Asset[]; canManage: boolean }) {
   const [items, setItems] = useState<Incident[]>([]);
   const [severity, setSeverity] = useState("");
   const [status, setStatus] = useState("");
@@ -70,9 +70,9 @@ export default function IncidentsPanel({ api, assets }: { api: Api; assets: Asse
   return <section className="incident-panel" id="incidents">
     <div className="incident-heading">
       <div><div className="risk-kicker">OPERATIONS / HUMAN RESPONSE</div><h2>AI incident management</h2><p>Record AI-related events, coordinate triage, and preserve resolution history in the organization audit chain.</p></div>
-      <button className="risk-primary incident-new" onClick={() => setShowCreate(v => !v)}>{showCreate ? "Cancel" : "+ Report incident"}</button>
+      {canManage && <button className="risk-primary incident-new" onClick={() => setShowCreate(v => !v)}>{showCreate ? "Cancel" : "+ Report incident"}</button>}
     </div>
-    {showCreate && <form className="incident-create" onSubmit={create}>
+    {showCreate && canManage && <form className="incident-create" onSubmit={create}>
       <label>Incident title<input required minLength={3} maxLength={180} value={title} onChange={e => setTitle(e.target.value)} placeholder="Unexpected sensitive output in assistant response" /></label>
       <label>Severity<select value={incidentSeverity} onChange={e => setIncidentSeverity(e.target.value)}>{["LOW","MEDIUM","HIGH","CRITICAL"].map(v => <option key={v}>{v}</option>)}</select></label>
       <label>Related AI asset <select value={assetId} onChange={e => setAssetId(e.target.value)}><option value="">Not linked to an asset</option>{assets.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
@@ -87,7 +87,7 @@ export default function IncidentsPanel({ api, assets }: { api: Api; assets: Asse
       <h3>{item.title}</h3><p>{item.description}</p>
       <div className="incident-meta"><span>{item.asset?.name || "Unlinked AI asset"}</span><span>{item.source || "Source not specified"}</span><span>Reported by {item.createdByMembership?.user.name || "Workspace member"}</span></div>
       {item.resolution && <div className="incident-resolution"><strong>Resolution</strong><p>{item.resolution}</p></div>}
-      {nextStatus[item.status] && <div className="incident-actions">
+      {canManage && nextStatus[item.status] && <div className="incident-actions">
         {item.status === "INVESTIGATING" && resolutionId === item.id ? <><input aria-label="Resolution summary" minLength={10} maxLength={3000} value={resolution} onChange={e => setResolution(e.target.value)} placeholder="Document containment, remediation, and validation…" /><button className="risk-primary" disabled={busy || resolution.trim().length < 10} onClick={() => advance(item, "RESOLVED")}>Confirm resolution</button><button className="risk-secondary" onClick={() => {setResolutionId("");setResolution("");}}>Cancel</button></> :
         <button className="session-refresh" disabled={busy} onClick={() => item.status === "INVESTIGATING" ? setResolutionId(item.id) : advance(item, nextStatus[item.status]!)}>{item.status === "INVESTIGATING" ? "Resolve incident" : item.status === "RESOLVED" ? "Close incident" : "Move to " + nextStatus[item.status]!.toLowerCase()}</button>}
       </div>}
