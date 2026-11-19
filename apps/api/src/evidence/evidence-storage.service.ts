@@ -6,6 +6,7 @@ import { PrismaService } from "../prisma/prisma.service.js";
 import { S3CompatibleStorage } from "./s3-compatible-storage.js";
 import type { CreateEvidenceUploadDto } from "./dto/create-evidence-upload.dto.js";
 import type { VerifyEvidenceDto } from "./dto/verify-evidence.dto.js";
+import type { PurgeEvidenceDto } from "./dto/purge-evidence.dto.js";
 import { ClamAvScanner } from "./clamav-scanner.js";
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
@@ -243,4 +244,84 @@ export class EvidenceStorageService {
       };
     });
   }
+  async rescanQuarantined(auth: AuthenticatedUser, assessmentId: string, evidenceId: string) {
+    this.assertRole(auth, REVIEW_ROLES);
+    const evidence = await this.prisma.evidenceFile.findFirst({
+      where: { id: evidenceId, riskAssessmentId: assessmentId, organizationId: auth.organizationId },
+    });
+    if (!evidence) throw new NotFoundException("Evidence file was not found.");
+    if (evidence.status !== EvidenceFileStatus.QUARANTINED) {
+      throw new ConflictException("Only quarantined evidence can be rescanned.");
+    }
+
+    const bytes = await this.storage.readObject(evidence.storageKey, MAX_FILE_BYTES);
+    validateFileSignature(bytes, evidence.contentType);
+    const scan = await this.scanner.scan(bytes);
+    const nextStatus = scan.clean ? EvidenceFileStatus.UPLOADED : EvidenceFileStatus.QUARANTINED;
+    return this.prisma.$transaction(async (tx) => {
+      const changed = await tx.evidenceFile.updateMany({
+        where: { id: evidenceId, organizationId: auth.organizationId, status: EvidenceFileStatus.QUARANTINED },
+        data: { status: nextStatus },
+      });
+      if (changed.count !== 1) throw new ConflictException("Evidence state changed; reload and try again.");
+      await tx.auditLog.create({
+        data: {
+          organizationId: auth.organizationId,
+          actorId: auth.sub,
+          action: scan.clean ? "evidence.quarantine_released_after_rescan" : "evidence.quarantine_rescan_detected",
+          entityType: "EvidenceFile",
+          entityId: evidenceId,
+          metadata: {
+            riskAssessmentId: assessmentId,
+            scanner: "ClamAV",
+            previousStatus: "QUARANTINED",
+            nextStatus,
+            ...(scan.clean ? {} : { signature: scan.signature }),
+          },
+        },
+      });
+      return { id: evidenceId, status: nextStatus, scan: scan.clean ? "CLEAN" : "INFECTED" };
+    });
+  }
+
+  async purgeQuarantined(auth: AuthenticatedUser, assessmentId: string, evidenceId: string, dto: PurgeEvidenceDto) {
+    this.assertRole(auth, [MembershipRole.OWNER, MembershipRole.ADMIN, MembershipRole.SECURITY_ANALYST]);
+    const evidence = await this.prisma.evidenceFile.findFirst({
+      where: { id: evidenceId, riskAssessmentId: assessmentId, organizationId: auth.organizationId },
+      select: { id: true, storageKey: true, status: true, checksumSha256: true, originalFileName: true },
+    });
+    if (!evidence) throw new NotFoundException("Evidence file was not found.");
+    if (evidence.status !== EvidenceFileStatus.QUARANTINED) {
+      throw new ConflictException("Only quarantined evidence can be purged.");
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      // Claim the quarantined row before touching object storage. The conditional update
+      // serializes concurrent rescans/purges; a failed DELETE rolls the DB transition back.
+      const changed = await tx.evidenceFile.updateMany({
+        where: { id: evidenceId, organizationId: auth.organizationId, status: EvidenceFileStatus.QUARANTINED },
+        data: { status: EvidenceFileStatus.PURGED },
+      });
+      if (changed.count !== 1) throw new ConflictException("Evidence state changed; reload and try again.");
+      await this.storage.deleteObject(evidence.storageKey);
+      await tx.auditLog.create({
+        data: {
+          organizationId: auth.organizationId,
+          actorId: auth.sub,
+          action: "evidence.quarantine_purged",
+          entityType: "EvidenceFile",
+          entityId: evidenceId,
+          metadata: {
+            riskAssessmentId: assessmentId,
+            originalFileName: evidence.originalFileName,
+            checksumSha256: evidence.checksumSha256,
+            reason: dto.reason.trim(),
+            storageObjectDeleted: true,
+          },
+        },
+      });
+      return { id: evidenceId, status: EvidenceFileStatus.PURGED };
+    });
+  }
+
 }

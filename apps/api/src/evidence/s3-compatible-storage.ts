@@ -53,7 +53,7 @@ export class S3CompatibleStorage {
     return createHmac("sha256", serviceKey).update("aws4_request").digest();
   }
 
-  presign(method: "PUT" | "GET", key: string, expiresSeconds: number, contentType?: string, checksumBase64?: string): PresignedRequest {
+  presign(method: "PUT" | "GET" | "DELETE", key: string, expiresSeconds: number, contentType?: string, checksumBase64?: string): PresignedRequest {
     const { endpoint, region, accessKey, secretKey, sessionToken } = this.settings();
     const url = this.objectUrl(key);
     const now = new Date();
@@ -134,6 +134,13 @@ export class S3CompatibleStorage {
       throw new ServiceUnavailableException("Evidence object length changed during malware scanning.");
     }
     return bytes;
+  }
+
+  async deleteObject(key: string) {
+    const signed = this.presign("DELETE", key, 120);
+    const response = await fetch(signed.url, { method: "DELETE", signal: AbortSignal.timeout(15_000) });
+    if (response.status === 404 || response.ok) return;
+    throw new ServiceUnavailableException("Evidence object could not be securely deleted from private storage.");
   }
 
 }
