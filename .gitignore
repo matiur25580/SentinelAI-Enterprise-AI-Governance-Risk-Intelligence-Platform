@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Builds and caches
+.next/
+dist/
+build/
+coverage/
+.turbo/
+.cache/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local data
+postgres-data/
+redis-data/
+uploads/
+*.log
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
