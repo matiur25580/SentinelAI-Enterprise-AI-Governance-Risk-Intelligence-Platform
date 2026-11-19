@@ -368,7 +368,9 @@ test("register, login, refresh rotation, and logout work against PostgreSQL", { 
   assert.ok(revokedSession.data.revokedTokenCount >= 1);
   const revokedSessionRefresh = await request("/auth/refresh", { method: "POST", body: { refreshToken: sessionLogin.data.refreshToken } });
   assert.equal(revokedSessionRefresh.response.status, 401, "Revoking a session must invalidate its refresh token family.");
-  const revokedSessionAudit = await request("/audit-logs?action=auth.session.revoke", { token: sessionLogin.data.accessToken });
+  const revokedSessionAccess = await request("/auth/me", { token: sessionLogin.data.accessToken });
+  assert.equal(revokedSessionAccess.response.status, 401, "Revoking a session must invalidate its access token immediately.");
+  const revokedSessionAudit = await request("/audit-logs?action=auth.session.revoke", { token: register.data.accessToken });
   assert.equal(revokedSessionAudit.response.status, 200);
   assert.ok(revokedSessionAudit.data.data.some((entry) => entry.entityId === sessionPayload.familyId));
 
