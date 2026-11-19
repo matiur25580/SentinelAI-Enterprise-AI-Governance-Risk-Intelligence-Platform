@@ -57,3 +57,17 @@ The first migration creates organizations, users, memberships, refresh-token ses
 - JWT access and refresh secrets must be independent random values of at least 32 characters.
 - Registration assigns the creator the workspace OWNER role.
 - Email verification, rate limiting, account recovery, SSO, and invitation workflows are not implemented yet; do not expose this foundation as a production identity service until those controls and tests are completed.
+
+
+## AI incident management
+
+All incident endpoints require an authenticated bearer token and operate within the caller's active organization.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/incidents` | Register an AI incident (workspace incident-manager roles) |
+| GET | `/incidents` | List incidents with optional `status`, `severity`, `page`, and `limit` filters |
+| GET | `/incidents/:id` | Retrieve one incident within the active organization |
+| PATCH | `/incidents/:id` | Advance lifecycle, assign an active workspace member, or record resolution (workspace incident-manager roles) |
+
+Lifecycle transitions are `OPEN → TRIAGED → INVESTIGATING → RESOLVED → CLOSED`. A resolved incident may be reopened to `INVESTIGATING`; a closed incident is terminal. A resolution summary is required before resolution. Every create/update is recorded in the append-only organization audit chain. Supported incident-manager roles: `OWNER`, `ADMIN`, `AI_GOVERNANCE`, `SECURITY_ANALYST`, and `COMPLIANCE_OFFICER`.
