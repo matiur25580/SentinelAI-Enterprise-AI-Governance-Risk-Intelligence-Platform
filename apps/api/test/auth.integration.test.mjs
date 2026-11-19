@@ -143,7 +143,7 @@ test("register, login, refresh rotation, and logout work against PostgreSQL", { 
     assert.match(secondaryAuditExport.data.raw, /auth\.login/);
     assert.ok(!secondaryAuditExport.data.raw.includes("Customer Support LLM"));
     assert.ok(!secondaryAuditExport.data.raw.includes(profile.data.organization.id));
-    await database.query('UPDATE "Membership" SET "role" = \'MEMBER\', "updatedAt" = NOW() WHERE "id" = $1', [secondMembershipId]);
+    await database.query('UPDATE "Membership" SET "role" = \'OWNER\', "updatedAt" = NOW() WHERE "id" = $1', [secondMembershipId]);
 
     const primaryMembership = await database.query(
       'SELECT "id" FROM "Membership" WHERE "userId" = (SELECT "id" FROM "User" WHERE "email" = $1) AND "organizationId" = $2',
