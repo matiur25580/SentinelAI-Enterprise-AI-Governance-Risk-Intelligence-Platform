@@ -31,6 +31,7 @@ export class EvidenceStorageService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: S3CompatibleStorage,
+    private readonly scanner: ClamAvScanner,
   ) {}
 
   private assertRole(auth: AuthenticatedUser, roles: MembershipRole[]) {
