@@ -21,6 +21,10 @@ export function requestTelemetryMiddleware(
       : "unmatched";
 
     console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      severity: "info",
+      service: "sentinelai-api",
+      environment: process.env.NODE_ENV ?? "development",
       event: "http.request",
       requestId,
       method: request.method,
