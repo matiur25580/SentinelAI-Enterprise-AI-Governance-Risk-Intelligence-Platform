@@ -38,7 +38,7 @@ export class AuthService {
     config: ConfigService,
     private readonly accountLifecycle: AccountLifecycleService,
   ) {
-    this.requireEmailVerification = config.get<boolean>("AUTH_REQUIRE_VERIFIED_EMAIL") ?? config.get<string>("NODE_ENV") === "production";
+    this.requireEmailVerification = config.get<boolean>("AUTH_REQUIRE_VERIFIED_EMAIL") ?? (config.get<string>("NODE_ENV") === "production");
     this.accessSecret = config.getOrThrow<string>("JWT_ACCESS_SECRET");
     this.refreshSecret = config.getOrThrow<string>("JWT_REFRESH_SECRET");
 
