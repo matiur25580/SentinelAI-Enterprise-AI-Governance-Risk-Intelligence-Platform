@@ -50,7 +50,7 @@ export class AccountLifecycleService {
     if (user && !user.emailVerifiedAt) {
       try {
         await this.issueEmailVerification(user.id);
-      } catch (error) {
+      } catch {
         this.logger.warn("Email verification delivery failed.");
       }
     }
@@ -124,7 +124,7 @@ export class AccountLifecycleService {
           "Reset your SentinelAI password",
           `A password reset was requested for your account. Use this one-time link within 30 minutes:\n\n${link}\n\nIf you did not request this, ignore this message. Your password will not change.`,
         );
-      } catch (error) {
+      } catch {
         this.logger.warn("Password reset email delivery failed.");
       }
     }
