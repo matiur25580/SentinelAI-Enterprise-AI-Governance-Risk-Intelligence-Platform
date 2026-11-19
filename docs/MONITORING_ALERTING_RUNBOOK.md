@@ -5,7 +5,8 @@ This is a provider-neutral operations plan for SentinelAI. It documents what an 
 ## Current signals and limitations
 
 - API liveness: `GET /api/v1/health`. Use this to detect whether the API process responds; it is not a dependency check.
-- API readiness: `GET /api/v1/health/ready`. Use this for traffic readiness and database-connectivity monitoring. It returns HTTP 503 when PostgreSQL is unavailable.\n- Request telemetry: each API response includes a server-generated `X-Request-Id`; the API emits one JSON `http.request` event on response completion with the request ID, method, route template, status code, and duration.
+- API readiness: `GET /api/v1/health/ready`. Use this for traffic readiness and database-connectivity monitoring. It returns HTTP 503 when PostgreSQL is unavailable.
+- Request telemetry: each API response includes a server-generated `X-Request-Id`; the API emits one JSON `http.request` event on response completion with the request ID, method, route template, status code, and duration.
 - CI: GitHub Actions runs the repository Quality and Security workflows on their configured events.
 - PostgreSQL and Redis are defined for local development in Docker Compose. Production database/Redis monitoring must be configured in the selected provider.
 - The repository does not currently define a production metrics exporter, tracing backend, centralized log pipeline, pager integration, or alert rules. Do not assume these are enabled.
