@@ -1,0 +1,27 @@
+name: Quality
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  repository-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check required foundation files
+        run: |
+          test -f README.md
+          test -f package.json
+          test -f docker-compose.yml
+          test -f docs/ARCHITECTURE.md
+      - name: Check for committed environment files
+        run: |
+          if git ls-files | grep -E '(^|/)\.env($|\.)' | grep -v '\.env.example$'; then
+            echo "Potential secret-bearing environment file is tracked."
+            exit 1
+          fi
