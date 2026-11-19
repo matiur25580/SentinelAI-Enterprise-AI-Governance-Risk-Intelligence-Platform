@@ -1,0 +1,51 @@
+name: Production smoke monitoring
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 6 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-smoke-monitor
+  cancel-in-progress: false
+
+jobs:
+  configuration:
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - name: Check monitoring configuration
+        id: check
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+        shell: bash
+        run: |
+          if [[ -n "$API_BASE_URL" ]]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Production smoke monitoring is not configured. Set the repository Actions variable API_BASE_URL to enable it."
+          fi
+
+  smoke:
+    needs: configuration
+    if: needs.configuration.outputs.configured == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      API_BASE_URL: ${{ vars.API_BASE_URL }}
+      WEB_ORIGIN: ${{ vars.WEB_ORIGIN }}
+      SMOKE_TIMEOUT_MS: "8000"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run read-only production smoke checks
+        run: node scripts/production-smoke-check.mjs

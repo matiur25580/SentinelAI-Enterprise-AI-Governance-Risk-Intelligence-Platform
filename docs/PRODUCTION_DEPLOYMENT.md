@@ -68,3 +68,17 @@ node scripts/production-smoke-check.mjs
 - The script checks API liveness and database readiness independently, validates their JSON payloads, and exits non-zero if any check fails.
 - It does not authenticate, mutate data, run migrations, or verify business workflows. Use approved test accounts and a separate controlled smoke-test plan for those checks.
 - Do not put credentials, query strings, or fragments in the supplied origins. Run from a trusted operator environment and avoid printing secrets in shell history.
+
+
+## Scheduled GitHub Actions smoke monitoring
+
+The `Production smoke monitoring` workflow runs daily at 06:17 UTC and can also be started manually from the Actions tab. It performs read-only GET requests through the production smoke-check script; a failed API, database-readiness, or configured web-origin check fails the workflow run.
+
+Configure these repository-level Actions variables under **Settings → Secrets and variables → Actions → Variables**:
+
+- `API_BASE_URL` (required): the public HTTPS origin of the deployed API, without a path, query, or credentials.
+- `WEB_ORIGIN` (optional): the public HTTPS origin of the web application.
+
+The workflow deliberately skips the smoke job and emits a notice when `API_BASE_URL` is not configured. This prevents an unconfigured workflow from being mistaken for a successful production check. Do not store secrets in these variables; the smoke checks require public service origins only.
+
+GitHub Actions scheduled runs are best-effort and are not a substitute for a dedicated uptime-monitoring provider or an on-call alert route. Configure notification/alert ownership separately before production go-live.
