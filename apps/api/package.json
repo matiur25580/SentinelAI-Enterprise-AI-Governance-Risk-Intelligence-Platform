@@ -9,7 +9,7 @@
     "start": "node dist/main.js",
     "lint": "eslint \"{src,test}/**/*.ts\"",
     "typecheck": "tsc --noEmit",
-    "test:integration": "node --test test/*.integration.test.mjs",
+    "test:integration": "node --test --test-concurrency=1 test/*.integration.test.mjs",
     "db:generate": "prisma generate --config prisma.config.ts",
     "db:migrate": "prisma migrate dev --config prisma.config.ts",
     "db:deploy": "prisma migrate deploy --config prisma.config.ts",
