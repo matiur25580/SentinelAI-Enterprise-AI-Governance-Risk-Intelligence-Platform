@@ -325,7 +325,7 @@ export default function RiskAssessmentsPage() {
           </article>)}</div> : <div className="session-empty"><strong>No active sessions found</strong><span>Refresh to check again. Your current session may have expired.</span></div>}
           <p className="session-note">Revocation invalidates the session’s refresh-token family and associated access tokens immediately. The action is recorded in the organization audit log.</p>
         </section>
-        <IncidentsPanel api={api} assets={assets} />
+        <IncidentsPanel api={api} assets={assets} canManage={["OWNER","ADMIN","AI_GOVERNANCE","SECURITY_ANALYST","COMPLIANCE_OFFICER"].includes(profile?.role || "")} />
         <section className="audit-panel" id="audit-logs">
           <div className="audit-heading"><div><div className="risk-kicker">GOVERNANCE / ACCOUNTABILITY</div><h2>Immutable audit trail</h2><p>Organization-scoped events with chain sequence, actor attribution, and integrity verification.</p></div><div className="audit-actions"><button className="session-refresh" disabled={auditBusy} onClick={verifyAuditIntegrity}>Verify chain</button><button className="session-refresh" disabled={auditBusy} onClick={exportAuditCsv}>Export CSV</button></div></div>
           {auditIntegrity && <div className={"audit-integrity " + (auditIntegrity.verified ? "verified" : "failed")} role="status"><strong>{auditIntegrity.verified ? "Chain verified" : "Integrity check failed"}</strong><span>{auditIntegrity.recordsChecked.toLocaleString()} records checked{auditIntegrity.reason ? " · " + auditIntegrity.reason : ""}</span></div>}
