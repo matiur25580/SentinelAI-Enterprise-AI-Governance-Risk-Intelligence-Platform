@@ -108,9 +108,10 @@ export class S3CompatibleStorage {
     const stringToSign = ["AWS4-HMAC-SHA256", amzDate, scope, sha256(canonicalRequest)].join("\n");
     const signatureValue = signature(this.signingKey(secretKey, date, region), stringToSign);
     const authorization = "AWS4-HMAC-SHA256 Credential=" + accessKey + "/" + scope + ", SignedHeaders=" + signedHeaders + ", Signature=" + signatureValue;
+    const requestHeaders = Object.fromEntries(Object.entries(headers).filter(([name]) => name !== "host"));
     const response = await fetch(url, {
       method: "HEAD",
-      headers: { ...headers, authorization },
+      headers: { ...requestHeaders, authorization },
       signal: AbortSignal.timeout(10_000),
     });
     if (response.status === 404) return null;
