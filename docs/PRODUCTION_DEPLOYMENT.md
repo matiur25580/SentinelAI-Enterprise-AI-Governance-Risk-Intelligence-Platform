@@ -50,3 +50,21 @@ The repository remains early development. Before using it as a production identi
 - Production security assessment and review of the AI engine future authorization, quotas, isolation, and audit context.
 
 Do not advertise regulatory compliance or certification based solely on this software or its framework mappings.
+
+
+## Automated post-deployment smoke check
+
+The repository includes a dependency-free Node.js smoke check for the API and optional web origin. Run it from the repository root after deployment, using the exact deployed service origins:
+
+```bash
+API_BASE_URL=https://api.example.com \
+WEB_ORIGIN=https://app.example.com \
+node scripts/production-smoke-check.mjs
+```
+
+- `API_BASE_URL` is required and must be an HTTPS origin (HTTP is allowed only for localhost development).
+- `WEB_ORIGIN` is optional; when supplied, the script verifies that the web root responds successfully.
+- `SMOKE_TIMEOUT_MS` optionally sets the per-request timeout (1,000–30,000 ms; default 8,000 ms).
+- The script checks API liveness and database readiness independently, validates their JSON payloads, and exits non-zero if any check fails.
+- It does not authenticate, mutate data, run migrations, or verify business workflows. Use approved test accounts and a separate controlled smoke-test plan for those checks.
+- Do not put credentials, query strings, or fragments in the supplied origins. Run from a trusted operator environment and avoid printing secrets in shell history.
