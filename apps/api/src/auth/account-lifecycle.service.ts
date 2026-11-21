@@ -97,6 +97,10 @@ export class AccountLifecycleService {
       if (verified.count !== 1) {
         throw new UnauthorizedException("The account action token is invalid or expired.");
       }
+      await tx.membership.updateMany({
+        where: { userId: action.userId, pendingEmailVerification: true, isActive: false },
+        data: { isActive: true, pendingEmailVerification: false },
+      });
       const memberships = await tx.membership.findMany({
         where: { userId: action.userId, isActive: true },
         select: { organizationId: true },
