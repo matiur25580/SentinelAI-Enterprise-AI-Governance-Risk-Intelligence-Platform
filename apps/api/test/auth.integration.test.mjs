@@ -120,9 +120,18 @@ test("email verification and password reset tokens are single-use and reset revo
     assert.equal(user.rowCount, 1);
     const userId = user.rows[0].id;
 
+    const disabledOrganizationId = randomUUID();
     await database.query(
-      'UPDATE "Membership" SET "isActive" = false, "pendingEmailVerification" = true WHERE "userId" = $1',
-      [userId],
+      'INSERT INTO "Organization" ("id", "name", "slug", "isActive", "createdAt", "updatedAt") VALUES ($1, $2, $3, true, NOW(), NOW())',
+      [disabledOrganizationId, "Disabled Workspace", `disabled-${Date.now()}`],
+    );
+    await database.query(
+      'INSERT INTO "Membership" ("id", "userId", "organizationId", "role", "isActive", "pendingEmailVerification", "createdAt", "updatedAt") VALUES ($1, $2, $3, \'MEMBER\', false, false, NOW(), NOW())',
+      [randomUUID(), userId, disabledOrganizationId],
+    );
+    await database.query(
+      'UPDATE "Membership" SET "isActive" = false, "pendingEmailVerification" = true WHERE "userId" = $1 AND "organizationId" <> $2',
+      [userId, disabledOrganizationId],
     );
     const verificationToken = `${randomUUID()}-${randomUUID()}`;
     await database.query(
@@ -142,6 +151,13 @@ test("email verification and password reset tokens are single-use and reset revo
     assert.equal(activatedMembership.rowCount, 1);
     assert.equal(activatedMembership.rows[0].isActive, true, "Email verification must activate only the pending membership.");
     assert.equal(activatedMembership.rows[0].pendingEmailVerification, false);
+    const disabledMembership = await database.query(
+      'SELECT "isActive", "pendingEmailVerification" FROM "Membership" WHERE "userId" = $1 AND "organizationId" = $2',
+      [userId, disabledOrganizationId],
+    );
+    assert.equal(disabledMembership.rowCount, 1);
+    assert.equal(disabledMembership.rows[0].isActive, false, "Email verification must not reactivate an admin-disabled membership.");
+    assert.equal(disabledMembership.rows[0].pendingEmailVerification, false);
 
     const reusedVerification = await request("/auth/email/verification/confirm", {
       method: "POST",
