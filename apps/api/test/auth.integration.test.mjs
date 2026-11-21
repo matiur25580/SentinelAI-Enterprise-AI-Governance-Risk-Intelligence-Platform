@@ -120,6 +120,10 @@ test("email verification and password reset tokens are single-use and reset revo
     assert.equal(user.rowCount, 1);
     const userId = user.rows[0].id;
 
+    await database.query(
+      'UPDATE "Membership" SET "isActive" = false, "pendingEmailVerification" = true WHERE "userId" = $1',
+      [userId],
+    );
     const verificationToken = `${randomUUID()}-${randomUUID()}`;
     await database.query(
       'INSERT INTO "AccountActionToken" ("id", "userId", "purpose", "tokenHash", "expiresAt", "createdAt") VALUES ($1, $2, \'EMAIL_VERIFICATION\', $3, NOW() + INTERVAL \'1 hour\', NOW())',
@@ -131,6 +135,13 @@ test("email verification and password reset tokens are single-use and reset revo
     });
     assert.equal(verified.response.status, 201, JSON.stringify(verified.data));
     assert.equal(verified.data.success, true);
+    const activatedMembership = await database.query(
+      'SELECT "isActive", "pendingEmailVerification" FROM "Membership" WHERE "userId" = $1',
+      [userId],
+    );
+    assert.equal(activatedMembership.rowCount, 1);
+    assert.equal(activatedMembership.rows[0].isActive, true, "Email verification must activate only the pending membership.");
+    assert.equal(activatedMembership.rows[0].pendingEmailVerification, false);
 
     const reusedVerification = await request("/auth/email/verification/confirm", {
       method: "POST",
