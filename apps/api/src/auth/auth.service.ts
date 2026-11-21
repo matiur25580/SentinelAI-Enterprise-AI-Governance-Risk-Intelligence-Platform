@@ -87,6 +87,8 @@ export class AuthService {
           userId: user.id,
           organizationId: organization.id,
           role: MembershipRole.OWNER,
+          isActive: !this.requireEmailVerification,
+          pendingEmailVerification: this.requireEmailVerification,
         },
       });
       await tx.auditLog.create({
