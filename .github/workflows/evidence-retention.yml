@@ -30,7 +30,7 @@ jobs:
           API_URL: ${{ vars.SENTINELAI_API_URL }}
           RETENTION_TOKEN: ${{ secrets.EVIDENCE_RETENTION_CRON_TOKEN }}
         run: |
-          curl --fail-with-body --silent --show-error --max-time 480 \\
-            --request POST \\
-            --header "x-evidence-retention-token: $RETENTION_TOKEN" \\
+          curl --fail-with-body --silent --show-error --max-time 480 \
+            --request POST \
+            --header "x-evidence-retention-token: $RETENTION_TOKEN" \
             "$API_URL/internal/evidence-retention/run"
