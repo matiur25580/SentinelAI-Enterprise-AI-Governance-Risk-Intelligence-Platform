@@ -37,6 +37,7 @@ function csvCell(value: unknown): string {
 export class AuditLogsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // Scope every audit query to the caller's organization before applying optional filters.
   private buildWhere(auth: AuthenticatedUser, query: AuditLogQueryDto) {
     const from = query.from ? new Date(query.from) : undefined;
     const to = query.to ? new Date(query.to) : undefined;
