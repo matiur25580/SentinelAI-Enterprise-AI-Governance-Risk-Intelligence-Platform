@@ -50,6 +50,7 @@ export class AuthService {
     }
   }
 
+  // Create the organization, initial owner membership, user, and audit event as one unit.
   async register(dto: RegisterDto) {
     const email = dto.email.trim().toLowerCase();
     const existing = await this.prisma.user.findUnique({ where: { email } });
