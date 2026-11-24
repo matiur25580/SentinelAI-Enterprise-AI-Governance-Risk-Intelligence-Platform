@@ -10,6 +10,7 @@ export class EvidenceRetentionController {
     private readonly retention: EvidenceRetentionService,
   ) {}
 
+  // Keep the scheduled cleanup endpoint internal by requiring its configured shared token.
   @Post("run")
   async run(@Headers("x-evidence-retention-token") suppliedToken?: string) {
     const expectedToken = this.config.get<string>("EVIDENCE_RETENTION_CRON_TOKEN");
