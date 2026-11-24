@@ -11,6 +11,7 @@ type AuthenticatedRequest = Request & { user: AuthenticatedUser };
 export class RolesGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
+  // Resolve handler-level role metadata first, then fall back to controller-level metadata.
   canActivate(context: ExecutionContext): boolean {
     const requiredRoles = this.reflector.getAllAndOverride<MembershipRole[]>(ROLES_KEY, [
       context.getHandler(),
